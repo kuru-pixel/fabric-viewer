@@ -1,0 +1,28 @@
+name: Fetch three.js vendor files
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fetch-three.yml
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make vendor dir
+        run: mkdir -p vendor/three
+      - name: Download three.js files
+        run: |
+          curl -L -o vendor/three/three.min.js https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
+          curl -L -o vendor/three/GLTFLoader.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
+          curl -L -o vendor/three/OrbitControls.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
+      - name: Commit files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/three/three.min.js vendor/three/GLTFLoader.js vendor/three/OrbitControls.js
+          git commit -m "Add three.js vendor files (r161)" || echo "No changes"
+          git push
