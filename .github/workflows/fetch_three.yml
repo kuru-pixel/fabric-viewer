@@ -12,17 +12,35 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Make lib dir
-        run: mkdir -p lib/three
-      - name: Download three.js files
+
+      - name: Make dir
+        run: mkdir -p assets/threejs
+
+      - name: Download three.js files (with fallback)
+        shell: bash
         run: |
-          curl -L -o lib/three/three.min.js https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
-          curl -L -o lib/three/GLTFLoader.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
-          curl -L -o lib/three/OrbitControls.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
+          set -e
+          fetch() {
+            PRIMARY="$1"; MIRROR="$2"; OUT="$3"
+            echo "-> $OUT from $PRIMARY"
+            (curl -fL "$PRIMARY" -o "$OUT") || (echo "primary failed, try mirror" && curl -fL "$MIRROR" -o "$OUT")
+          }
+          # r161 = npm 0.161.0
+          fetch "https://unpkg.com/three@0.161.0/build/three.min.js" \
+                "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js" \
+                "assets/threejs/three.min.js"
+          fetch "https://unpkg.com/three@0.161.0/examples/js/loaders/GLTFLoader.js" \
+                "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js" \
+                "assets/threejs/GLTFLoader.js"
+          fetch "https://unpkg.com/three@0.161.0/examples/js/controls/OrbitControls.js" \
+                "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js" \
+                "assets/threejs/OrbitControls.js"
+          echo "Sizes:"; wc -c assets/threejs/*
+
       - name: Commit files
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add lib/three/three.min.js lib/three/GLTFLoader.js lib/three/OrbitControls.js
-          git commit -m "Add three.js vendor files to lib/three (r161)" || echo "No changes"
+          git add assets/threejs/three.min.js assets/threejs/GLTFLoader.js assets/threejs/OrbitControls.js
+          git commit -m "Add three.js files to assets/threejs (0.161.0)" || echo "No changes"
           git push
