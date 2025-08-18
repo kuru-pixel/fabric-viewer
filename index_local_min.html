@@ -8,59 +8,60 @@
         font:12px/1.4 monospace;padding:8px 10px;border-radius:8px;max-width:42ch;white-space:pre-wrap}
 </style>
 </head><body>
-<div id="diag">loading…</div>
+<div id="diag">diag start</div>
 <canvas id="c"></canvas>
 
-<!-- ローカル同梱 three.js（同じリポジトリ内） -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js"></script>
-
-
 <script>
-const log = (m)=>document.getElementById('diag').textContent += "\n" + m;
-document.getElementById('diag').textContent = "diag start";
+const diag = (m)=>document.getElementById('diag').textContent += "\n"+m;
+function loadOne(cands, done){
+  if(!cands.length){ diag("ERROR: all cdns failed"); return; }
+  const src=cands.shift(); diag("try: "+src);
+  const s=document.createElement('script');
+  s.src=src; s.onload=()=>{diag("loaded: "+src); done&&done();};
+  s.onerror=()=>{diag("fail : "+src); s.remove(); loadOne(cands,done);};
+  document.head.appendChild(s);
+}
 
-// 1) three.js 読めてる？
-if (typeof THREE === 'undefined') {
-  log("NG: window.THREE undefined → /vendor/three/three.min.js が見つからない/読めない");
-  log("確認: このURLを直接開ける？ → " + location.origin + location.pathname.replace(/index_local_min\.html$/, "vendor/three/three.min.js"));
-} else {
-  log("OK: THREE loaded");
-  try {
-    const canvas = document.getElementById('c');
-    const r = new THREE.WebGLRenderer({canvas, antialias:true});
-    if (r.outputColorSpace !== undefined) r.outputColorSpace = THREE.SRGBColorSpace;
-    log("OK: WebGLRenderer created");
+const threeC = [
+  "./assets/threejs/three.min.js",
+  "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js",
+  "https://unpkg.com/three@0.161.0/build/three.min.js",
+  "https://rawcdn.githack.com/mrdoob/three.js/r161/build/three.min.js"
+];
+const gltfC = [
+  "./assets/threejs/GLTFLoader.js",
+  "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js",
+  "https://unpkg.com/three@0.161.0/examples/js/loaders/GLTFLoader.js",
+  "https://rawcdn.githack.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js"
+];
+const orbitC = [
+  "./assets/threejs/OrbitControls.js",
+  "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js",
+  "https://unpkg.com/three@0.161.0/examples/js/controls/OrbitControls.js",
+  "https://rawcdn.githack.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js"
+];
 
-    const s = new THREE.Scene(); s.background = new THREE.Color(0x141414);
-    const c = new THREE.PerspectiveCamera(45, 2, 0.1, 100); c.position.set(0,0,3);
-    s.add(new THREE.HemisphereLight(0xffffff,0x223,1));
+loadOne(threeC.slice(), ()=>{
+  if(typeof THREE==='undefined'){ diag("NG: THREE undefined after load"); return; }
+  loadOne(gltfC.slice(), ()=> loadOne(orbitC.slice(), start));
+});
 
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1,1,1),
-      new THREE.MeshStandardMaterial({color:0x66aaff, roughness:.6, metalness:.1})
-    );
-    s.add(mesh);
-
-    function resize(){
-      const w = canvas.clientWidth, h = canvas.clientHeight;
-      if (canvas.width!==w || canvas.height!==h) {
-        r.setSize(w,h,false); c.aspect = w/h; c.updateProjectionMatrix();
-      }
-    }
-    function loop(t){
-      resize();
-      mesh.rotation.y = t*0.0015;
-      r.render(s,c);
-      requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
-    log("OK: render loop started");
-  } catch (e) {
-    log("NG: WebGLRenderer 作成/描画で例外 → " + e.message);
-    log("Chrome/Edge の『ハードウェア アクセラレーション』をONにして再起動、または別ブラウザで試す");
+function start(){
+  diag("OK: libs ready");
+  const canvas=document.getElementById('c');
+  const r=new THREE.WebGLRenderer({canvas,antialias:true});
+  if (r.outputColorSpace!==undefined) r.outputColorSpace=THREE.SRGBColorSpace;
+  const s=new THREE.Scene(); s.background=new THREE.Color(0x141414);
+  const c=new THREE.PerspectiveCamera(45,2,0.1,100); c.position.set(0,0,3);
+  s.add(new THREE.HemisphereLight(0xffffff,0x223,1));
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),
+              new THREE.MeshStandardMaterial({color:0x66aaff,roughness:.6,metalness:.1}));
+  s.add(mesh);
+  function resize(){ const w=canvas.clientWidth,h=canvas.clientHeight;
+    if(canvas.width!==w||canvas.height!==h){ r.setSize(w,h,false); c.aspect=w/h; c.updateProjectionMatrix(); }
   }
+  function loop(t){ resize(); mesh.rotation.y=t*0.0015; r.render(s,c); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop); diag("OK: render loop started");
 }
 </script>
 </body></html>
