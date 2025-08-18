@@ -13,21 +13,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get three.js r161 via git
+      # npm の公式 tgz から取得（安定）
+      - name: Download three@0.161.0 (npm tarball) and extract
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth=1 --branch r161 https://github.com/mrdoob/three.js.git three_src
+          curl -fsSL -o three_npm.tgz https://registry.npmjs.org/three/-/three-0.161.0.tgz
+          tar -xzf three_npm.tgz
           mkdir -p assets/threejs
-          cp three_src/build/three.min.js assets/threejs/
-          cp three_src/examples/js/loaders/GLTFLoader.js assets/threejs/
-          cp three_src/examples/js/controls/OrbitControls.js assets/threejs/
-          echo "=== files ==="; ls -l assets/threejs; wc -c assets/threejs/*
+          cp package/build/three.min.js assets/threejs/
+          cp package/examples/js/loaders/GLTFLoader.js assets/threejs/
+          cp package/examples/js/controls/OrbitControls.js assets/threejs/
+          echo "=== sizes ==="; wc -c assets/threejs/*
 
       - name: Commit files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/threejs/three.min.js assets/threejs/GLTFLoader.js assets/threejs/OrbitControls.js
-          git commit -m "Add three.js files to assets/threejs (r161 via git clone)" || echo "No changes"
+          git commit -m "Add three.js files to assets/threejs from npm 0.161.0" || echo "No changes"
           git push
