@@ -11,25 +11,32 @@ jobs:
     permissions:
       contents: write
     steps:
+      # 自分のリポジトリをチェックアウト
       - uses: actions/checkout@v4
 
-      - name: Download three r161 files (raw.githubusercontent)
-        shell: bash
+      # three.js の公式リポ（公開）を r161 でチェックアウト（外部URLダウンロードは使わない）
+      - name: Checkout three.js r161
+        uses: actions/checkout@v4
+        with:
+          repository: mrdoob/three.js
+          ref: r161
+          path: three_src
+
+      # 必要な3ファイルだけコピーして assets/threejs に配置
+      - name: Copy vendor files
         run: |
           set -euo pipefail
           mkdir -p assets/threejs
-          curl -fsSLo assets/threejs/three.min.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
-          curl -fsSLo assets/threejs/GLTFLoader.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
-          curl -fsSLo assets/threejs/OrbitControls.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
-          echo "=== sizes ==="; wc -c assets/threejs/*
+          cp three_src/build/three.min.js assets/threejs/
+          cp three_src/examples/js/loaders/GLTFLoader.js assets/threejs/
+          cp three_src/examples/js/controls/OrbitControls.js assets/threejs/
+          echo "=== files ==="; ls -l assets/threejs; wc -c assets/threejs/*
 
+      # 追加・コミット・プッシュ
       - name: Commit files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/threejs/three.min.js assets/threejs/GLTFLoader.js assets/threejs/OrbitControls.js
-          git commit -m "Add three.js files to assets/threejs (r161)" || echo "No changes"
+          git commit -m "Add three.js files to assets/threejs (r161 via checkout)" || echo "No changes"
           git push
