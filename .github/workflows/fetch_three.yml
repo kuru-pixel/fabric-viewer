@@ -13,51 +13,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Node versions (debug)
-        run: |
-          node -v || true
-          npm -v || true
-
-      - name: Download three@0.161.0 via npm pack and extract
+      - name: Fetch files from three.js r161 (raw)
         shell: bash
         run: |
           set -euo pipefail
-          npm pack three@0.161.0
-          tar -xzf three-0.161.0.tgz
-          echo "=== LIST package ==="
-          find package -maxdepth 3 -type f | sort
-
           mkdir -p assets/threejs
-
-          # three.min.js があればそれを、無ければ three.js を代替でコピー
-          if [ -f package/build/three.min.js ]; then
-            cp package/build/three.min.js assets/threejs/three.min.js
-          elif [ -f package/build/three.js ]; then
-            cp package/build/three.js assets/threejs/three.min.js
-          else
-            echo "three(.min).js が見つかりません"; exit 1
-          fi
-
-          # ローダとコントロール
-          if [ -f package/examples/js/loaders/GLTFLoader.js ]; then
-            cp package/examples/js/loaders/GLTFLoader.js assets/threejs/
-          else
-            echo "GLTFLoader.js が見つかりません"; exit 1
-          fi
-
-          if [ -f package/examples/js/controls/OrbitControls.js ]; then
-            cp package/examples/js/controls/OrbitControls.js assets/threejs/
-          else
-            echo "OrbitControls.js が見つかりません"; exit 1
-          fi
-
-          echo "=== SIZES ==="
-          wc -c assets/threejs/*
+          curl -fsSL -o assets/threejs/three.min.js \
+            https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
+          curl -fsSL -o assets/threejs/GLTFLoader.js \
+            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
+          curl -fsSL -o assets/threejs/OrbitControls.js \
+            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
+          echo "=== sizes ==="; wc -c assets/threejs/*
 
       - name: Commit files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/threejs/three.min.js assets/threejs/GLTFLoader.js assets/threejs/OrbitControls.js
-          git commit -m "Add three.js files to assets/threejs (npm 0.161.0, robust)" || echo "No changes"
+          git commit -m "Add three.js vendor files from r161 (raw)" || echo "No changes"
           git push
