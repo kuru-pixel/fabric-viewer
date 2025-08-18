@@ -12,17 +12,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Make vendor dir
-        run: mkdir -p vendor/three
+      - name: Make lib dir
+        run: mkdir -p lib/three
       - name: Download three.js files
         run: |
-          curl -L -o vendor/three/three.min.js https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
-          curl -L -o vendor/three/GLTFLoader.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
-          curl -L -o vendor/three/OrbitControls.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
+          curl -L -o lib/three/three.min.js https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
+          curl -L -o lib/three/GLTFLoader.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
+          curl -L -o lib/three/OrbitControls.js https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
       - name: Commit files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add vendor/three/three.min.js vendor/three/GLTFLoader.js vendor/three/OrbitControls.js
-          git commit -m "Add three.js vendor files (r161)" || echo "No changes"
+          git add lib/three/three.min.js lib/three/GLTFLoader.js lib/three/OrbitControls.js
+          git commit -m "Add three.js vendor files to lib/three (r161)" || echo "No changes"
           git push
