@@ -10,26 +10,37 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      THREE_TAG: r146   # ← 非モジュール版が確実にあるタグ（必要なら r145 等に変えてもOK）
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch files from three.js r161 (raw)
+      - name: Download three.js (non-module) files from tag
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          base="https://raw.githubusercontent.com/mrdoob/three.js/${THREE_TAG}"
           mkdir -p assets/threejs
-          curl -fsSL -o assets/threejs/three.min.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js
-          curl -fsSL -o assets/threejs/GLTFLoader.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js
-          curl -fsSL -o assets/threejs/OrbitControls.js \
-            https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js
-          echo "=== sizes ==="; wc -c assets/threejs/*
+
+          curl -fL --retry 5 --retry-delay 2 "$base/build/three.min.js" \
+            -o assets/threejs/three.min.js
+          curl -fL --retry 5 --retry-delay 2 "$base/examples/js/loaders/GLTFLoader.js" \
+            -o assets/threejs/GLTFLoader.js
+          curl -fL --retry 5 --retry-delay 2 "$base/examples/js/controls/OrbitControls.js" \
+            -o assets/threejs/OrbitControls.js
+
+          # 念のため存在チェック
+          test -s assets/threejs/three.min.js
+          test -s assets/threejs/GLTFLoader.js
+          test -s assets/threejs/OrbitControls.js
+
+          echo "=== sizes ==="
+          wc -c assets/threejs/*
 
       - name: Commit files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/threejs/three.min.js assets/threejs/GLTFLoader.js assets/threejs/OrbitControls.js
-          git commit -m "Add three.js vendor files from r161 (raw)" || echo "No changes"
+          git commit -m "Add three.js vendor files from ${THREE_TAG} (raw non-module)" || echo "No changes"
           git push
