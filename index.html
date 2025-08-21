@@ -20,8 +20,11 @@
     font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
-  #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0}
-  #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+  #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0;padding:2px 6px;border-radius:6px}
+  #matList > div:hover{background:#ffffff17}
+  #matList .name{flex:1;min-width:0}
+  #matList .label{font-size:12px;font-weight:600}
+  #matList .orig{opacity:.6;margin-left:6px;font-size:11px;white-space:nowrap}
   #matList select{background:#223;color:#fff;border:1px solid #445;border-radius:6px;padding:3px 6px}
 
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
@@ -80,7 +83,7 @@
 
     <details style="margin-top:8px;" open>
       <summary>パーツ割り当て（A/B/C）</summary>
-      <div id="matList" style="max-height:180px;overflow:auto;margin-top:6px;"></div>
+      <div id="matList" style="max-height:220px;overflow:auto;margin-top:6px;"></div>
       <small>ヒント：マテリアル名が <code>fabric_a*</code> / <code>fabric_b*</code> / <code>fabric_c*</code> なら初期値で自動割り当てされます。</small>
     </details>
 
@@ -102,6 +105,21 @@
 /* ========= 基本 ========= */
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
+
+/* ① 表示名マッピング（必要に応じて追記してね） */
+const FRIENDLY_RULES = [
+  { re: /s[-_]?133_2524/i, label: '右肩（前）' },
+  { re: /s[-_]?133_2525/i, label: '左肩（前）' },
+  { re: /s[-_]?132_2505/i, label: '袖口' },
+  { re: /default[_ ]?button/i, label: 'ボタン' },
+  // 例: { re: /collar/i, label: '襟' },
+  // 例: { re: /pocket/i, label: 'ポケット' },
+];
+function friendlyNameFor(raw) {
+  const n = (raw||'').toString();
+  for (const r of FRIENDLY_RULES) if (r.re.test(n)) return r.label;
+  return n || '(unnamed)';
+}
 
 /* three.js */
 const canvas = $('c');
@@ -175,7 +193,6 @@ function applyParamsToTexture(key){
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
   t.center.set(0.5,0.5); t.needsUpdate = true;
-  // 割り当て済みのマテリアルも更新
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
@@ -193,6 +210,19 @@ function applyAssignments(){
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
+/* ② マテリアル行のホバーでハイライト */
+function setMatHighlight(mat, on){
+  if(!mat) return;
+  if(!mat.userData._origEmissive && mat.emissive){
+    mat.userData._origEmissive = mat.emissive.clone();
+  }
+  if(mat.emissive){
+    if(on) mat.emissive.setHex(0x66ffcc);
+    else if(mat.userData._origEmissive) mat.emissive.copy(mat.userData._origEmissive);
+    mat.needsUpdate = true;
+  }
+}
+
 /* 割り当て UI */
 function buildMatList(){
   const box = $('matList'); if(!box) return;
@@ -206,13 +236,25 @@ function buildMatList(){
       else assign[m.uuid] = '—';
     }
     const row=document.createElement('div');
-    const name=document.createElement('span'); name.className='name'; name.textContent=m.name||'(unnamed)';
+
+    // 左: わかりやすいラベル + 元名
+    const name=document.createElement('div'); name.className='name';
+    const label=document.createElement('span'); label.className='label'; label.textContent = friendlyNameFor(m.name);
+    const orig = document.createElement('span'); orig.className='orig'; orig.textContent = m.name || '(unnamed)';
+    name.appendChild(label); name.appendChild(orig);
+
+    // 右: 選択
     const sel=document.createElement('select');
     [['—','なし'],['A','A'],['B','B'],['C','C']].forEach(([v,t])=>{
       const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o);
     });
     sel.value=assign[m.uuid];
     sel.onchange=()=>{ assign[m.uuid]=sel.value; applyAssignments(); };
+
+    // ホバーでハイライト
+    row.addEventListener('mouseenter', ()=>setMatHighlight(m, true));
+    row.addEventListener('mouseleave', ()=>setMatHighlight(m, false));
+
     row.appendChild(name); row.appendChild(sel); box.appendChild(row);
   });
 }
