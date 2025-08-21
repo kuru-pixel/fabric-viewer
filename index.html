@@ -20,7 +20,8 @@
     font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
-  #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0}
+  #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0;padding:3px 6px;border-radius:6px}
+  #matList > div:hover{background:#ffffff10}
   #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
   #matList select{background:#223;color:#fff;border:1px solid #445;border-radius:6px;padding:3px 6px}
 
@@ -80,7 +81,7 @@
 
     <details style="margin-top:8px;" open>
       <summary>パーツ割り当て（A/B/C）</summary>
-      <div id="matList" style="max-height:180px;overflow:auto;margin-top:6px;"></div>
+      <div id="matList" style="max-height:220px;overflow:auto;margin-top:6px;"></div>
       <small>ヒント：マテリアル名が <code>fabric_a*</code> / <code>fabric_b*</code> / <code>fabric_c*</code> なら初期値で自動割り当てされます。</small>
     </details>
 
@@ -169,6 +170,7 @@ function prepTexture(t){
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
 
+/* A/B/C の倍率・回転をテクスチャへ反映 */
 function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
@@ -179,6 +181,7 @@ function applyParamsToTexture(key){
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
+/* パーツ割り当て適用（なし→真っ白） */
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
@@ -193,7 +196,50 @@ function applyAssignments(){
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
-/* 割り当て UI */
+/* （表示用）部位のわかりやすい名前を付与 */
+function niceName(str=''){
+  const s = str.toLowerCase();
+  const dict = {
+    's_133_2524': '右肩',
+    's_133_2524b': '左肩',
+    's_132_2505': '右身頃',
+    's_132_2505b': '左身頃',
+    's_131_2485': '袖・リブ',
+    'default button': 'ボタン類'
+  };
+  for (const k in dict){ if(s.includes(k)) return dict[k]; }
+  // fabric_* はそのまま fabric_A/B/C 表記
+  if (s.startsWith('fabric_a')) return '（タグ）fabric_A';
+  if (s.startsWith('fabric_b')) return '（タグ）fabric_B';
+  if (s.startsWith('fabric_c')) return '（タグ）fabric_C';
+  return str || '(unnamed)';
+}
+
+/* ② マテリアル行のホバーでハイライト（薄い赤） */
+function setMatHighlight(mat, on){
+  if(!mat) return;
+  if(!mat.userData._origEmissive && mat.emissive){
+    mat.userData._origEmissive = mat.emissive.clone();
+    mat.userData._origEmissiveIntensity =
+      (typeof mat.emissiveIntensity === 'number') ? mat.emissiveIntensity : undefined;
+  }
+  if(mat.emissive){
+    if(on){
+      // 薄い赤 (#ff6b6b) に発光
+      mat.emissive.setHex(0xff6b6b);
+      if(typeof mat.emissiveIntensity === 'number') mat.emissiveIntensity = 0.6;
+    }else{
+      // 元に戻す
+      mat.emissive.copy(mat.userData._origEmissive);
+      if(typeof mat.emissiveIntensity === 'number' && mat.userData._origEmissiveIntensity !== undefined){
+        mat.emissiveIntensity = mat.userData._origEmissiveIntensity;
+      }
+    }
+    mat.needsUpdate = true;
+  }
+}
+
+/* 割り当て UI 構築（ホバーでハイライト、名前を見やすく） */
 function buildMatList(){
   const box = $('matList'); if(!box) return;
   box.innerHTML='';
@@ -206,13 +252,18 @@ function buildMatList(){
       else assign[m.uuid] = '—';
     }
     const row=document.createElement('div');
-    const name=document.createElement('span'); name.className='name'; name.textContent=m.name||'(unnamed)';
+    const name=document.createElement('span'); name.className='name'; name.textContent = niceName(m.name);
     const sel=document.createElement('select');
     [['—','なし'],['A','A'],['B','B'],['C','C']].forEach(([v,t])=>{
       const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o);
     });
     sel.value=assign[m.uuid];
     sel.onchange=()=>{ assign[m.uuid]=sel.value; applyAssignments(); };
+
+    // ホバーでハイライト（薄い赤）
+    row.addEventListener('pointerenter', ()=> setMatHighlight(m, true));
+    row.addEventListener('pointerleave', ()=> setMatHighlight(m, false));
+
     row.appendChild(name); row.appendChild(sel); box.appendChild(row);
   });
 }
