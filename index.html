@@ -103,6 +103,13 @@
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
 
+/* ▼▼ 不要パーツ 自動非表示のキーワード（必要に応じて増やせます） ▼▼ */
+const HIDE_NODE_KEYWORDS = [
+  'Default Button_',   // 例: CLO由来のボタン・縫い付け部品
+  // 'Trim', 'Button Card', ... 必要なら追加
+];
+/* ▲▲ ここまで ▲▲ */
+
 /* three.js */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
@@ -118,7 +125,17 @@ const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); s
 let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
+  model = glb.scene;
+  scene.add(model);
+
+  // ① 不要パーツをキーワードで非表示
+  autoHideByKeywords(model);
+  // ② さらに物理的に外れた極小パーツも消したい場合だけ下行のコメントを外す
+  // cullSpatialOutliers(model);
+
+  analyze(model);
+  fit(model);
+  msg('garment.glb を読み込みました');
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
   const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
@@ -126,6 +143,41 @@ loader.load(GLB_PATH, (glb)=>{
   targetMats=[cube.material]; updateMatInfo(); buildMatList();
   msg('assets/garment.glb が無いのでキューブ表示');
 });
+
+/* ===== 不要パーツ処理 ===== */
+// キーワード一致（mesh.name または material.name に含まれていたら非表示）
+function autoHideByKeywords(root){
+  let hit = 0;
+  root.traverse(o=>{
+    if (!o.isMesh) return;
+    const n = (o.name||'') + ' | ' + (o.material?.name||'');
+    if (HIDE_NODE_KEYWORDS.some(k => n.includes(k))) {
+      o.visible = false; hit++;
+    }
+  });
+  if (hit) msg(`不要パーツを ${hit} 個非表示にしました`);
+}
+
+// オプション：本体BBoxの外にある/極小パーツを非表示（副作用が出る可能性あり）
+function cullSpatialOutliers(root){
+  const mainBB = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3(); mainBB.getSize(size);
+  const safeBB = mainBB.clone().expandByScalar(size.length()*0.02); // 少し余裕
+  let culled = 0;
+  root.traverse(o=>{
+    if (!o.isMesh || !o.visible) return;
+    const bb = new THREE.Box3().setFromObject(o);
+    const diag = bb.getSize(new THREE.Vector3()).length();
+    if (!safeBB.containsBox(bb) || diag < 0.01) { o.visible=false; culled++; }
+  });
+  if (culled) msg(`空間はみ出し ${culled} 個を非表示にしました`);
+}
+
+// Console で listMeshes() と打つと、mesh名 / material名 を一覧表示（調査用）
+window.listMeshes = () => {
+  if (!model) return console.warn('model not loaded');
+  model.traverse(o=>{ if (o.isMesh) console.log('mesh:', o.name, '| mat:', o.material?.name); });
+};
 
 /* マテリアル抽出 */
 function analyze(root){
@@ -175,7 +227,6 @@ function applyParamsToTexture(key){
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
   t.center.set(0.5,0.5); t.needsUpdate = true;
-  // 割り当て済みのマテリアルも更新
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
