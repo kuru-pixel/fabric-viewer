@@ -4,58 +4,87 @@
 <title>Fabric Viewer (Local libs)</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
-  #ui{position:fixed;z-index:2;top:10px;left:10px;background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px}
+  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+  /* ==== UI（開閉スライド対応） ==== */
+  #uiWrap{position:fixed;z-index:2;top:10px;left:10px;display:flex;align-items:flex-start;
+          transition:transform .25s ease}
+  #ui{
+    background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px
+  }
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
-  #msg{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
-  #footer{position:fixed;right:10px;bottom:10px;z-index:2;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
-  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+  /* 開閉トグル */
+  #uiToggle{
+    margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;
+    width:32px;height:56px;border-radius:8px;background:#e23;color:#fff;
+    font-size:20px;line-height:56px;text-align:center;user-select:none;
+    box-shadow:0 2px 8px #0006
+  }
+  /* 閉じた時：ラッパー全体を左へスライドし、タブだけ残す */
+  #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
+
   /* パーツ割り当てリスト */
   #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0}
   #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
   #matList select{background:#223;color:#fff;border:1px solid #445;border-radius:6px;padding:3px 6px}
-  /* A/B/Cブロック */
+
+  /* A/B/C ブロック */
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
   .block h4{margin:0 0 4px 0;font-size:13px}
+
+  #footer{position:fixed;right:10px;bottom:10px;z-index:2;font-size:12px;
+          background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
+  #msg{position:fixed;z-index:2;bottom:10px;left:50%;
+       transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;
+       border-radius:8px;font-size:12px}
 </style>
 </head><body>
-<div id="ui">
-  <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
 
-  <button id="resetCam" style="margin-bottom:4px;">カメラリセット</button>
-  <small id="matinfo" style="margin-left:6px;"></small>
+<!-- 開閉スライドする UI -->
+<div id="uiWrap">
+  <div id="ui">
+    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
 
-  <!-- 生地 A -->
-  <div class="block">
-    <h4>生地A</h4>
-    <label><input id="texA" type="file" accept="image/*"></label>
-    <label>タイル倍率A <input id="repeatA" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvA">3</span></label>
-    <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
+    <button id="resetCam" style="margin-bottom:4px;">カメラリセット</button>
+    <small id="matinfo" style="margin-left:6px;"></small>
+
+    <!-- 生地 A -->
+    <div class="block">
+      <h4>生地A</h4>
+      <label><input id="texA" type="file" accept="image/*"></label>
+      <label>タイル倍率A <input id="repeatA" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvA">3</span></label>
+      <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
+    </div>
+
+    <!-- 生地 B -->
+    <div class="block">
+      <h4>生地B</h4>
+      <label><input id="texB" type="file" accept="image/*"></label>
+      <label>タイル倍率B <input id="repeatB" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvB">3</span></label>
+      <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
+    </div>
+
+    <!-- 生地 C -->
+    <div class="block">
+      <h4>生地C</h4>
+      <label><input id="texC" type="file" accept="image/*"></label>
+      <label>タイル倍率C <input id="repeatC" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvC">3</span></label>
+      <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
+    </div>
+
+    <details style="margin-top:8px;" open>
+      <summary>パーツ割り当て（A/B/C）</summary>
+      <div id="matList" style="max-height:180px;overflow:auto;margin-top:6px;"></div>
+      <small>ヒント：マテリアル名が <code>fabric_a*</code> / <code>fabric_b*</code> / <code>fabric_c*</code> なら初期値で自動割り当てされます。</small>
+    </details>
+
+    <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示</small></div>
   </div>
 
-  <!-- 生地 B -->
-  <div class="block">
-    <h4>生地B</h4>
-    <label><input id="texB" type="file" accept="image/*"></label>
-    <label>タイル倍率B <input id="repeatB" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvB">3</span></label>
-    <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
-  </div>
-
-  <!-- 生地 C -->
-  <div class="block">
-    <h4>生地C</h4>
-    <label><input id="texC" type="file" accept="image/*"></label>
-    <label>タイル倍率C <input id="repeatC" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvC">3</span></label>
-    <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
-  </div>
-
-  <details style="margin-top:8px;" open>
-    <summary>パーツ割り当て（A/B/C）</summary>
-    <div id="matList" style="max-height:180px;overflow:auto;margin-top:6px;"></div>
-    <small>ヒント：マテリアル名が <code>fabric_a*</code> / <code>fabric_b*</code> / <code>fabric_c*</code> なら初期値で自動割り当てされます。</small>
-  </details>
-
-  <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示</small></div>
+  <!-- 開閉トグル（赤いタブ） -->
+  <button id="uiToggle" aria-label="toggle panel">‹</button>
 </div>
 
 <div id="footer">ドラッグで回転 / ホイールでズーム / 右ドラッグで移動</div>
@@ -86,13 +115,10 @@ let model;
 let targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model);
-  forceWhiteBase();          // ★ 追加：初期表示は真っ白
-  fit(model); msg('garment.glb を読み込みました');
+  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
-  // ★ 白いキューブに変更
-  const m=new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.0,roughness:0.9});
+  const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo(); buildMatList();
   msg('assets/garment.glb が無いのでキューブ表示');
@@ -114,20 +140,6 @@ function analyze(root){
 }
 function updateMatInfo(){
   document.getElementById('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`;
-}
-
-/* ===== 初期状態を真っ白にする ===== */
-function forceWhiteBase(){
-  const matsFabric = targetMats.filter(m => (m.name||'').toLowerCase().startsWith('fabric'));
-  const mats = matsFabric.length ? matsFabric : targetMats;
-  mats.forEach(m=>{
-    if(!m) return;
-    if('map' in m) m.map = null;        // 画像解除
-    if(m.color) m.color.set(0xffffff);  // 白
-    if(typeof m.metalness==='number') m.metalness = 0.0;
-    if(typeof m.roughness==='number') m.roughness = 0.9;
-    m.needsUpdate = true;
-  });
 }
 
 /* ===== カメラ合わせ ===== */
@@ -159,31 +171,21 @@ function prepTexture(t){
 
 /* key: 'A'|'B'|'C' のパラメータをテクスチャに反映 */
 function applyParamsToTexture(key){
-  const s = state[key];
-  const t = s.tex;
-  if(!t) return;
-  s.repv.textContent = s.repeat;
-  s.rotv.textContent = s.rotDeg;
+  const s = state[key]; const t = s.tex; if(!t) return;
+  s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
-  t.center.set(0.5,0.5);
-  t.needsUpdate = true;
+  t.center.set(0.5,0.5); t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
 /* パーツ割り当てを反映（なしは真っ白に） */
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid]; // 'A'|'B'|'C'|'—'
-    let tex = (key && state[key]) ? state[key].tex : null;
-
+    const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
     if(m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)){
-      if(!tex || key==='—'){
-        m.map = null;
-        if(m.color) m.color.set(0xffffff);
-      } else {
-        m.map = tex;
-      }
+      if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
+      else { m.map = tex; }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
@@ -194,10 +196,8 @@ function applyAssignments(){
 
 /* パーツ割り当て UI を構築 */
 function buildMatList(){
-  const box = document.getElementById('matList');
-  if(!box) return;
+  const box = document.getElementById('matList'); if(!box) return;
   box.innerHTML='';
-
   targetMats.forEach(m=>{
     if(!(m.uuid in assign)){
       const n = (m.name||'').toLowerCase();
@@ -206,25 +206,19 @@ function buildMatList(){
       else if(n.startsWith('fabric_c') || n.includes('_c_')) assign[m.uuid] = 'C';
       else assign[m.uuid] = '—';
     }
-
-    const row  = document.createElement('div');
-    const name = document.createElement('span');
-    name.className='name';
-    name.textContent = m.name || '(unnamed)';
-
-    const sel = document.createElement('select');
+    const row=document.createElement('div');
+    const name=document.createElement('span'); name.className='name'; name.textContent=m.name||'(unnamed)';
+    const sel=document.createElement('select');
     [['—','なし'],['A','A'],['B','B'],['C','C']].forEach(([v,t])=>{
       const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o);
     });
-    sel.value = assign[m.uuid];
-    sel.onchange = ()=>{ assign[m.uuid]=sel.value; applyAssignments(); };
-
-    row.appendChild(name); row.appendChild(sel);
-    box.appendChild(row);
+    sel.value=assign[m.uuid];
+    sel.onchange=()=>{ assign[m.uuid]=sel.value; applyAssignments(); };
+    row.appendChild(name); row.appendChild(sel); box.appendChild(row);
   });
 }
 
-/* ===== UI イベント ===== */
+/* ===== UIイベント ===== */
 document.getElementById('resetCam').addEventListener('click', ()=>{
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
@@ -253,15 +247,25 @@ texC.addEventListener('change', e=>{
 /* スライダー（A/B/C個別） */
 repeatA.addEventListener('input', ()=>{ state.A.repeat=repeatA.value; applyParamsToTexture('A'); });
 rotA.addEventListener('input',    ()=>{ state.A.rotDeg=rotA.value;   applyParamsToTexture('A'); });
-
 repeatB.addEventListener('input', ()=>{ state.B.repeat=repeatB.value; applyParamsToTexture('B'); });
 rotB.addEventListener('input',    ()=>{ state.B.rotDeg=rotB.value;   applyParamsToTexture('B'); });
-
 repeatC.addEventListener('input', ()=>{ state.C.repeat=repeatC.value; applyParamsToTexture('C'); });
 rotC.addEventListener('input',    ()=>{ state.C.rotDeg=rotC.value;   applyParamsToTexture('C'); });
 
+/* ===== 開閉トグル（状態保存つき） ===== */
+const uiWrap = document.getElementById('uiWrap');
+const uiToggle = document.getElementById('uiToggle');
+function setCollapsed(v){
+  uiWrap.classList.toggle('collapsed', v);
+  uiToggle.textContent = v ? '›' : '‹';
+  localStorage.setItem('uiCollapsed', v ? '1' : '0');
+}
+uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
+setCollapsed(localStorage.getItem('uiCollapsed')==='1');
+
 /* ===== ループ ===== */
-function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight; if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
+function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
 function loop(){ resize(); controls.update(); renderer.render(scene,camera); requestAnimationFrame(loop); } loop();
 
 /* ===== メッセージ ===== */
