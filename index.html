@@ -1,14 +1,16 @@
 <!doctype html><html><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Fabric Viewer (Local libs)</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
-  #ui{position:fixed;z-index:2;top:10px;left:10px;background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px}
-  #ui label{display:block;font-size:12px;margin:6px 0 4px} #ui input[type="range"]{width:220px}
+  #ui{position:fixed;z-index:2;top:10px;left:10px;background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:340px}
+  #ui label{display:block;font-size:12px;margin:6px 0 4px}
+  #ui input[type="range"]{width:220px}
   #msg{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
   #footer{position:fixed;right:10px;bottom:10px;z-index:2;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
-  /* 割り当てリストの見た目を少しだけ整える */
+  /* 割り当てリストの見た目 */
   #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0}
   #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
   #matList select{background:#223;color:#fff;border:1px solid #445;border-radius:6px;padding:3px 6px}
@@ -17,25 +19,32 @@
 <div id="ui">
   <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
 
-  <!-- 既存：全体に一括で貼る用 -->
-  <label>生地画像アップ（JPG/PNG）<input id="file" type="file" accept="image/*"></label>
+  <!-- 全体に一括適用 -->
+  <label>生地画像アップ（JPG/PNG）
+    <input id="file" type="file" accept="image/*">
+  </label>
 
-  <label>タイル倍率 <input id="repeat" type="range" min="1" max="12" step="0.5" value="3"> <span id="repv">3</span></label>
-  <label>回転（度） <input id="rot" type="range" min="0" max="180" step="1" value="0"> <span id="rotv">0</span></label>
-  <button id="resetCam">カメラリセット</button> <small id="matinfo"></small>
+  <label>タイル倍率
+    <input id="repeat" type="range" min="1" max="12" step="0.5" value="3"> <span id="repv">3</span>
+  </label>
+  <label>回転（度）
+    <input id="rot" type="range" min="0" max="180" step="1" value="0"> <span id="rotv">0</span>
+  </label>
+  <button id="resetCam">カメラリセット</button>
+  <small id="matinfo" style="margin-left:6px"></small>
 
   <div style="margin:8px 0 6px;border-top:1px solid #ffffff22"></div>
 
-  <!-- 追加：生地 A/B/C とパーツ割り当て -->
+  <!-- 複数生地（パーツ別） -->
   <div style="font-weight:600;margin-bottom:4px">複数生地（パーツ別）</div>
   <label>生地A <input id="texA" type="file" accept="image/*"></label>
   <label>生地B <input id="texB" type="file" accept="image/*"></label>
   <label>生地C <input id="texC" type="file" accept="image/*"></label>
 
-  <details style="margin-top:6px;">
+  <details style="margin-top:6px;" open>
     <summary>パーツ割り当て（A/B/C）</summary>
     <div id="matList" style="max-height:180px;overflow:auto;margin-top:6px;"></div>
-    <small>ヒント：マテリアル名が <code>fabric_A_*</code> / <code>fabric_B_*</code> / <code>fabric_C_*</code> の場合は自動で割り当て候補になります。</small>
+    <small>ヒント：CLO のマテリアル名を <code>fabric_a...</code> / <code>fabric_b...</code> / <code>fabric_c...</code> にしておくと自動で候補に入ります。</small>
   </details>
 
   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示</small></div>
@@ -45,185 +54,225 @@
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
 
-<!-- ローカル同梱ライブラリ -->
+<!-- three.js ローカル同梱版 -->
 <script src="./assets/threejs/three.min.js"></script>
 <script src="./assets/threejs/GLTFLoader.js"></script>
 <script src="./assets/threejs/OrbitControls.js"></script>
 
 <script>
-/* ====== 基本設定 ====== */
-const SHOULD_APPLY_TO_ALL = true;               // fabric_ が無くても全部材質に適用
+/* ========= 基本設定 ========= */
 const GLB_PATH = './assets/garment.glb';
+const SHOULD_APPLY_TO_ALL = true; // fabric_* が見つからない時は全マテリアル対象
 
-/* ====== Three.js 初期化 ====== */
+/* ========= three.js 初期化 ========= */
 const canvas = document.querySelector('#c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
 if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x141414);
-const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
+const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100);
+camera.position.set(0,1.6,3.2);
+
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
-/* ====== モデル読込 ====== */
-let model, targetMats=[];
+/* ========= モデル読込 ========= */
+let model;
+let targetMats = [];   // テクスチャ対象にするマテリアル配列
 const loader = new THREE.GLTFLoader();
-loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
-}, undefined, ()=>{
-  // glb 無い場合はキューブ表示
-  const g=new THREE.BoxGeometry(1,1.2,0.5);
-  const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
-  const cube=new THREE.Mesh(g,m); scene.add(cube);
-  targetMats=[cube.material]; updateMatInfo(); buildMatList();
-  msg('assets/garment.glb が無いのでキューブ表示');
-});
 
-/* ====== マテリアル抽出 ====== */
+loader.load(
+  GLB_PATH,
+  (glb) => {
+    model = glb.scene; scene.add(model);
+    analyze(model); fit(model); msg('garment.glb を読み込みました');
+  },
+  undefined,
+  () => {
+    // glb が無い時はキューブを表示
+    const g = new THREE.BoxGeometry(1,1.2,0.5);
+    const m = new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
+    const cube = new THREE.Mesh(g,m); scene.add(cube);
+    targetMats = [cube.material];
+    updateMatInfo(); buildMatList();
+    msg('assets/garment.glb が無いのでキューブ表示');
+  }
+);
+
+/* ========= マテリアル抽出 ========= */
+// Standard/Physical どちらも対象に（CLO の設定によっては Physical になることがある）
+const isTexturable = (m) =>
+  m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.type === 'MeshStandardMaterial' || m.type === 'MeshPhysicalMaterial');
+
 function analyze(root){
-  const mats=new Set();
-  root.traverse(o=>{
-    if(o.isMesh && o.material){
-      Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);
+  const set = new Set();
+  root.traverse(o => {
+    if (o.isMesh && o.material) {
+      Array.isArray(o.material) ? o.material.forEach(m => set.add(m)) : set.add(o.material);
     }
   });
-  targetMats = Array.from(mats).filter(m => (m.name||'').startsWith('fabric_') && m.isMeshStandardMaterial);
-  if(!targetMats.length && SHOULD_APPLY_TO_ALL) targetMats = Array.from(mats).filter(m=>m.isMeshStandardMaterial);
+  const all = Array.from(set).filter(isTexturable);
+
+  // まず fabric_* を優先的に集める
+  targetMats = all.filter(m => (m.name || '').toLowerCase().startsWith('fabric_'));
+  if (!targetMats.length && SHOULD_APPLY_TO_ALL) targetMats = all;
+
+  // デバッグ用：コンソールで確認可能
+  try { window.__mats = targetMats; console.table(targetMats.map(m=>({name:m.name,type:m.type}))); } catch {}
+
   updateMatInfo();
-  buildMatList();  // ← 追加：UI のリストを構築
+  buildMatList();
 }
-function updateMatInfo(){ document.getElementById('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
 
-/* ====== カメラ合わせ ====== */
+function updateMatInfo(){
+  const el = document.getElementById('matinfo');
+  if (el) el.textContent = `適用対象: ${targetMats.length} material(s)`;
+}
+
+/* ========= カメラ合わせ ========= */
 function fit(obj){
-  const box=new THREE.Box3().setFromObject(obj), size=box.getSize(new THREE.Vector3()).length(), center=box.getCenter(new THREE.Vector3());
-  controls.target.copy(center); const dist=size*0.6/Math.tan((Math.PI*camera.fov)/360);
-  camera.position.copy(center.clone().add(new THREE.Vector3(0,size*0.1,dist)));
-  camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3()).length();
+  const center = box.getCenter(new THREE.Vector3());
+  controls.target.copy(center);
+  const dist = size * 0.6 / Math.tan((Math.PI * camera.fov) / 360);
+  camera.position.copy(center.clone().add(new THREE.Vector3(0, size*0.1, dist)));
+  camera.near = size / 100; camera.far = size * 10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* ====== テクスチャ関連 ====== */
+/* ========= テクスチャ関連 ========= */
 const texLoader = new THREE.TextureLoader();
-const rep=document.getElementById('repeat'), rot=document.getElementById('rot'), repv=document.getElementById('repv'), rotv=document.getElementById('rotv');
+const rep = document.getElementById('repeat');
+const rot = document.getElementById('rot');
+const repv = document.getElementById('repv');
+const rotv = document.getElementById('rotv');
 
-let texA=null, texB=null, texC=null;                  // 生地A/B/C のテクスチャ
-const assign = {};                                    // material.uuid -> 'A' | 'B' | 'C' | '—'
+let texA = null, texB = null, texC = null;  // 生地 A/B/C
+const assign = {};                          // material.uuid -> 'A' | 'B' | 'C' | '—'
 
 function prepTexture(t){
   if(!t) return;
-  if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;
-  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  if (t.colorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tileAllTextures();
 }
 
 function tileAllTextures(){
   const r = parseFloat(rep.value), ang = parseFloat(rot.value) * Math.PI/180;
-  repv.textContent=rep.value; rotv.textContent=rot.value;
-  [texA,texB,texC].forEach(t=>{
-    if(t){ t.repeat.set(r,r); t.rotation=ang; t.center.set(0.5,0.5); t.needsUpdate=true; }
+  if (repv) repv.textContent = rep.value;
+  if (rotv) rotv.textContent = rot.value;
+
+  [texA, texB, texC].forEach(t=>{
+    if(t){ t.repeat.set(r,r); t.rotation = ang; t.center.set(0.5,0.5); t.needsUpdate = true; }
   });
-  // 表示中の map にも反映（必須ではないが即時反映のため）
-  targetMats.forEach(m=>{ if(m.map){ m.map.needsUpdate=true; } });
+  // 画面に出ている map にも反映
+  targetMats.forEach(m => { if (m.map) m.map.needsUpdate = true; });
 }
 
-/* 全員に一括適用（既存ボタンの機能） */
+/* 全体一括適用（上のファイル選択） */
 function applyTextureAll(url){
-  const t=texLoader.load(url, ()=>{
-    prepTexture(t); msg('生地テクスチャを適用しました（全体）');
-  });
+  const t = texLoader.load(url, ()=>{ prepTexture(t); msg('生地テクスチャを適用しました（全体）'); });
   targetMats.forEach(m=>{
-    if(m.isMeshStandardMaterial){
-      m.map=t; m.needsUpdate=true;
-      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+    if (isTexturable(m)) {
+      m.map = t; m.needsUpdate = true;
+      if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.15);
+      if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.6);
     }
   });
 }
 
-/* A/B/C の割り当てに従って反映 */
+/* A/B/C の割り当てを適用 */
 function applyAssignments(){
   targetMats.forEach(m=>{
     let tex = null;
-    const key = assign[m.uuid];                      // 'A' | 'B' | 'C' | '—'
-    if(key==='A') tex = texA;
-    else if(key==='B') tex = texB;
-    else if(key==='C') tex = texC;
+    const key = assign[m.uuid];  // 'A' | 'B' | 'C' | '—'
+    if (key === 'A') tex = texA;
+    else if (key === 'B') tex = texB;
+    else if (key === 'C') tex = texC;
 
-    if(m.isMeshStandardMaterial){
+    if (isTexturable(m)) {
       m.map = tex || m.map || null;
       m.needsUpdate = true;
-      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+      if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.15);
+      if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.6);
     }
   });
   tileAllTextures();
 }
 
-/* マテリアルリストをUIに描画 */
+/* パーツ割り当てUIの構築 */
 function buildMatList(){
-  const box = document.getElementById('matList');
-  if(!box) return;
-  box.innerHTML='';
+  const box = document.getElementById('matList'); if (!box) return;
+  box.innerHTML = '';
 
   targetMats.forEach(m=>{
-    // 既定割り当て：名前に fabric_A / fabric_B / fabric_C が含まれたら仮割り当て
+    // 既定：名前から自動割り当て（先に決まっていない場合のみ）
     if(!(m.uuid in assign)){
-      const n = (m.name||'').toLowerCase();
-      if(n.startsWith('fabric_a') || n.includes('_a_')) assign[m.uuid] = 'A';
-      else if(n.startsWith('fabric_b') || n.includes('_b_')) assign[m.uuid] = 'B';
-      else if(n.startsWith('fabric_c') || n.includes('_c_')) assign[m.uuid] = 'C';
+      const nm = (m.name || '').toLowerCase();
+      if (nm.startsWith('fabric_a') || nm.includes('_a_')) assign[m.uuid] = 'A';
+      else if (nm.startsWith('fabric_b') || nm.includes('_b_')) assign[m.uuid] = 'B';
+      else if (nm.startsWith('fabric_c') || nm.includes('_c_')) assign[m.uuid] = 'C';
       else assign[m.uuid] = '—';
     }
 
     const row = document.createElement('div');
     const label = document.createElement('span');
-    label.className='name';
+    label.className = 'name';
     label.textContent = m.name || '(unnamed)';
 
     const sel = document.createElement('select');
     [['—','なし'],['A','A'],['B','B'],['C','C']].forEach(([v,t])=>{
-      const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o);
+      const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o);
     });
     sel.value = assign[m.uuid];
-    sel.onchange = ()=>{ assign[m.uuid]=sel.value; applyAssignments(); };
+    sel.onchange = ()=>{ assign[m.uuid] = sel.value; applyAssignments(); };
 
     row.appendChild(label); row.appendChild(sel);
     box.appendChild(row);
   });
 }
 
-/* ====== 既存UIのイベント ====== */
+/* ========= UI イベント ========= */
 document.getElementById('file').addEventListener('change', e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f) return; applyTextureAll(URL.createObjectURL(f));
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  applyTextureAll(URL.createObjectURL(f));
 });
 rep.addEventListener('input', tileAllTextures);
 rot.addEventListener('input', tileAllTextures);
+
 document.getElementById('resetCam').addEventListener('click', ()=>{
-  if(model) fit(model);
+  if (model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
 
-/* ====== 追加UI：生地 A/B/C のファイル選択 ====== */
+/* 生地 A/B/C の読み込み */
 document.getElementById('texA').addEventListener('change', e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const f = e.target.files && e.target.files[0]; if(!f) return;
   texA = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(texA); applyAssignments(); msg('生地Aを読み込みました'); });
 });
 document.getElementById('texB').addEventListener('change', e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const f = e.target.files && e.target.files[0]; if(!f) return;
   texB = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(texB); applyAssignments(); msg('生地Bを読み込みました'); });
 });
 document.getElementById('texC').addEventListener('change', e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const f = e.target.files && e.target.files[0]; if(!f) return;
   texC = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(texC); applyAssignments(); msg('生地Cを読み込みました'); });
 });
 
-/* ====== ループ ====== */
-function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight; if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
+/* ========= レンダリングループ ========= */
+function resize(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+}
 function loop(){ resize(); controls.update(); renderer.render(scene,camera); requestAnimationFrame(loop); } loop();
 
-/* ====== メッセージ ====== */
-let t; function msg(s){ const el=document.getElementById('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+/* ========= メッセージ ========= */
+let t; function msg(s){ const el=document.getElementById('msg'); if(!el) return;
+  el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
 </script>
 </body></html>
