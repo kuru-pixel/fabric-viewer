@@ -19,7 +19,7 @@
     font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
-  /* パーツリスト（選択は吹き出しで行う。ここはクリックで開く） */
+  /* パーツリスト（クリック→吹き出し） */
   #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0;padding:3px 6px;border-radius:6px;cursor:pointer}
   #matList > div:hover{background:#ffffff10}
   #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
@@ -32,11 +32,13 @@
   #msg{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
 
   /* 吹き出し（A/B/C/なし） */
-  #picker{position:fixed;z-index:5;background:#0b0b0bcc;border:1px solid #ffffff33;color:#fff;border-radius:10px;padding:8px;display:none;box-shadow:0 6px 24px #0008}
+  #picker{position:fixed;z-index:5;background:#0b0b0bcc;border:1px solid #ffffff33;color:#fff;border-radius:10px;padding:8px;display:none;box-shadow:0 6px 24px #0008;max-width:280px}
   #picker h5{margin:0 0 6px 0;font-size:12px;opacity:.9}
-  #picker .row{display:flex;gap:6px}
-  #picker button{border:1px solid #445;background:#223;color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer}
+  #picker .row{display:flex;gap:8px}
+  #picker button{position:relative;border:1px solid #445;background:#223;color:#fff;border-radius:8px;cursor:pointer;width:72px;height:72px;display:flex;align-items:center;justify-content:center;overflow:hidden}
   #picker button.active{outline:2px solid #ff6b6b}
+  #picker button img{max-width:100%;max-height:100%;display:none;border-radius:6px}
+  #picker button .label{position:absolute;left:6px;bottom:6px;background:#0009;padding:0 6px;border-radius:4px;font-size:11px}
 </style>
 </head><body>
 
@@ -99,10 +101,10 @@
 <div id="picker">
   <h5 id="pickerTitle">パーツに割り当て</h5>
   <div class="row">
-    <button data-slot="A">A</button>
-    <button data-slot="B">B</button>
-    <button data-slot="C">C</button>
-    <button data-slot="—">なし</button>
+    <button data-slot="A"><img><span class="label">A</span></button>
+    <button data-slot="B"><img><span class="label">B</span></button>
+    <button data-slot="C"><img><span class="label">C</span></button>
+    <button data-slot="—"><span class="label">なし</span></button>
   </div>
 </div>
 
@@ -143,14 +145,10 @@ loader.load(GLB_PATH, (glb)=>{
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
-/* パーツ名：見やすくする辞書（必要に応じて増やしてOK） */
+/* パーツ名の見やすい表示（必要に応じて拡張） */
 function niceName(str=''){
   const s = str.toLowerCase();
-  const dict = {
-    's_133_2524': '右肩', 's_133_2524b': '左肩',
-    's_132_2505': '右身頃','s_132_2505b': '左身頃',
-    's_131_2485': '袖・リブ', 'default button': 'ボタン類'
-  };
+  const dict = { 's_133_2524': '右肩','s_133_2524b':'左肩','s_132_2505':'右身頃','s_132_2505b':'左身頃','s_131_2485':'袖・リブ','default button':'ボタン類' };
   for (const k in dict){ if(s.includes(k)) return dict[k]; }
   if (s.startsWith('fabric_a')) return '（タグ）fabric_A';
   if (s.startsWith('fabric_b')) return '（タグ）fabric_B';
@@ -161,23 +159,15 @@ function niceName(str=''){
 /* マテリアル抽出 */
 function analyze(root){
   const mats=new Set();
-  root.traverse(o=>{
-    if(o.isMesh && o.material){
-      Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);
-    }
-  });
-  targetMats = Array.from(mats).filter(m =>
-    (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial))
-  );
+  root.traverse(o=>{ if(o.isMesh && o.material){ Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material); }});
+  targetMats = Array.from(mats).filter(m => (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)));
   updateMatInfo(); buildMatList();
 }
 function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
 
 /* カメラ */
 function fit(obj){
-  const box=new THREE.Box3().setFromObject(obj),
-        size=box.getSize(new THREE.Vector3()).length(),
-        center=box.getCenter(new THREE.Vector3());
+  const box=new THREE.Box3().setFromObject(obj), size=box.getSize(new THREE.Vector3()).length(), center=box.getCenter(new THREE.Vector3());
   controls.target.copy(center);
   const dist=size*0.6/Math.tan((Math.PI*camera.fov)/360);
   camera.position.copy(center.clone().add(new THREE.Vector3(0,size*0.1,dist)));
@@ -205,8 +195,7 @@ function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
-  t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
-  t.center.set(0.5,0.5); t.needsUpdate = true;
+  t.rotation = parseFloat(s.rotDeg) * Math.PI/180; t.center.set(0.5,0.5); t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
@@ -223,36 +212,23 @@ function applyAssignments(){
     }
   });
   ['A','B','C'].forEach(applyParamsToTexture);
-  // リストの表示タグ更新
   refreshTags();
 }
 
-/* ハイライト（薄い赤を前面に感じる） */
+/* ハイライト（薄い赤） */
 function setMatHighlight(mat, on){
   if(!mat) return;
   const ud = mat.userData;
   if(!ud._hlSaved){
     ud._hlSaved = true;
-    if(mat.emissive){
-      ud._origEmissive = mat.emissive.clone();
-      ud._origEmissiveIntensity =
-        (typeof mat.emissiveIntensity === 'number') ? mat.emissiveIntensity : undefined;
-    }
+    if(mat.emissive){ ud._origEmissive = mat.emissive.clone(); ud._origEmissiveIntensity = (typeof mat.emissiveIntensity==='number') ? mat.emissiveIntensity : undefined; }
     if(mat.color) ud._origColor = mat.color.clone();
   }
   if(on){
-    if(mat.emissive){
-      mat.emissive.setHex(0xff4d4d);
-      if(typeof mat.emissiveIntensity === 'number') mat.emissiveIntensity = 1.8;
-    }
+    if(mat.emissive){ mat.emissive.setHex(0xff4d4d); if(typeof mat.emissiveIntensity==='number') mat.emissiveIntensity = 1.8; }
     if(mat.color) mat.color.setHex(0xff6b6b);
   }else{
-    if(mat.emissive && ud._origEmissive){
-      mat.emissive.copy(ud._origEmissive);
-      if(typeof mat.emissiveIntensity==='number' && ud._origEmissiveIntensity !== undefined){
-        mat.emissiveIntensity = ud._origEmissiveIntensity;
-      }
-    }
+    if(mat.emissive && ud._origEmissive){ mat.emissive.copy(ud._origEmissive); if(typeof mat.emissiveIntensity==='number' && ud._origEmissiveIntensity !== undefined) mat.emissiveIntensity = ud._origEmissiveIntensity; }
     if(mat.color && ud._origColor) mat.color.copy(ud._origColor);
   }
   mat.needsUpdate = true;
@@ -263,23 +239,34 @@ const picker = $('picker');
 const pickerTitle = $('pickerTitle');
 let pickerMat = null;
 
+function updatePickerThumbs(){
+  ['A','B','C'].forEach(slot=>{
+    const btn = picker.querySelector(`button[data-slot="${slot}"]`);
+    const img = btn.querySelector('img');
+    const t = state[slot].tex;
+    const src = t && t.image && (t.image.currentSrc || t.image.src);
+    if(src){ img.src = src; img.style.display='block'; }
+    else{ img.removeAttribute('src'); img.style.display='none'; }
+  });
+}
+
 function showPickerForMat(mat, clientX, clientY, title){
   pickerMat = mat;
-  // 位置調整（画面外に出ないように）
-  const pad = 8;
+  updatePickerThumbs();
+
+  // 一旦表示してサイズ取得→画面内に収める
   picker.style.display = 'block';
-  const r = picker.getBoundingClientRect(); // 一旦出してサイズ取得
-  let x = clientX + 10, y = clientY + 10;
+  const r = picker.getBoundingClientRect();
+  let x = clientX + 10, y = clientY + 10, pad=8;
   if (x + r.width + pad > window.innerWidth)  x = clientX - r.width - 10;
   if (y + r.height + pad > window.innerHeight) y = clientY - r.height - 10;
   picker.style.left = x + 'px';
   picker.style.top  = y + 'px';
   pickerTitle.textContent = title || 'パーツに割り当て';
 
-  // 現在の割り当てをボタンに反映
+  // 現在の割り当てハイライト
   picker.querySelectorAll('button[data-slot]').forEach(btn=>{
-    const slot = btn.dataset.slot;
-    btn.classList.toggle('active', assign[mat.uuid] === slot);
+    btn.classList.toggle('active', assign[mat.uuid] === btn.dataset.slot);
   });
 
   // ハイライトON
@@ -299,29 +286,30 @@ picker.addEventListener('click', (e)=>{
   hidePicker();
   msg(`割り当て: ${slot==='—' ? 'なし' : slot}`);
 });
-// 吹き出し以外をクリックしたら閉じる
+// 外側クリックで閉じる
 document.addEventListener('pointerdown', (e)=>{
   if(picker.style.display!=='none' && !picker.contains(e.target)) hidePicker();
 });
-window.addEventListener('resize', hidePicker);
 
-/* ====== Raycaster で 3D パーツをクリック選択 ====== */
+/* ====== Raycaster で 3D パーツをクリック ====== */
 const ray = new THREE.Raycaster(); const pt = new THREE.Vector2();
 canvas.addEventListener('pointerdown',(e)=>{
-  const r=canvas.getBoundingClientRect();
-  pt.x=((e.clientX-r.left)/r.width)*2-1; pt.y=-((e.clientY-r.top)/r.height)*2+1;
+  // ← 重要：外側クローズの pointerdown が走らないように止める
+  e.stopPropagation();
+
+  const rect=canvas.getBoundingClientRect();
+  pt.x=((e.clientX-rect.left)/rect.width)*2-1; pt.y=-((e.clientY-rect.top)/rect.height)*2+1;
   ray.setFromCamera(pt,camera);
   const root = model || scene;
   const hit = ray.intersectObject(root,true)[0];
-  if(!hit || !hit.object) return;
+  if(!hit || !hit.object){ hidePicker(); return; }
 
-  // 面に割り当てられたマテリアルを取得
+  // 対象マテリアル
   let mat = hit.object.material;
   if(Array.isArray(mat)) mat = mat[ hit.face && typeof hit.face.materialIndex==='number' ? hit.face.materialIndex : 0 ];
-  if(!mat) return;
+  if(!mat){ hidePicker(); return; }
 
-  // タイトルは「見やすい名前（元名）」
-  const title = `${niceName(mat.name)} — ${mat.name || ''}`;
+  const title = `${niceName(mat.name)} — ${mat.name||''}`;
   showPickerForMat(mat, e.clientX, e.clientY, title);
 });
 
@@ -337,18 +325,15 @@ function buildMatList(){
       else if(n.startsWith('fabric_c') || n.includes('_c_')) assign[m.uuid] = 'C';
       else assign[m.uuid] = '—';
     }
-    const row=document.createElement('div');
-    row._mat = m;
+    const row=document.createElement('div'); row._mat = m;
     const name=document.createElement('span'); name.className='name'; name.textContent = `${niceName(m.name)} ${m.name ? '— '+m.name : ''}`;
-
     const tag=document.createElement('span'); tag.className='tag'; tag.textContent = assign[m.uuid] || '—';
 
-    // 行クリックで吹き出し
     row.addEventListener('click', (ev)=>{
-      const rect = row.getBoundingClientRect();
-      showPickerForMat(m, rect.right, rect.top + rect.height/2, `${niceName(m.name)} — ${m.name||''}`);
+      ev.stopPropagation();                   // ← 重要：即クローズを防止
+      const r = row.getBoundingClientRect();
+      showPickerForMat(m, r.right, r.top + r.height/2, `${niceName(m.name)} — ${m.name||''}`);
     });
-    // 行ホバーでハイライト
     row.addEventListener('pointerenter', ()=> setMatHighlight(m, true));
     row.addEventListener('pointerleave', ()=> { if(pickerMat!==m) setMatHighlight(m, false); });
 
@@ -356,7 +341,6 @@ function buildMatList(){
   });
 }
 function refreshTags(){
-  // リストの右端タグを最新化
   [...document.querySelectorAll('#matList > div')].forEach(row=>{
     if(!row._mat) return;
     const tag = row.querySelector('.tag');
@@ -371,30 +355,20 @@ $('resetCam').addEventListener('click', ()=>{
 });
 $('texA').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
-  state.A.tex = texLoader.load(URL.createObjectURL(f), ()=>{
-    prepTexture(state.A.tex); applyParamsToTexture('A'); applyAssignments(); msg('生地Aを読み込みました');
-  });
+  state.A.tex = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(state.A.tex); applyParamsToTexture('A'); applyAssignments(); msg('生地Aを読み込みました'); });
 });
 $('texB').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
-  state.B.tex = texLoader.load(URL.createObjectURL(f), ()=>{
-    prepTexture(state.B.tex); applyParamsToTexture('B'); applyAssignments(); msg('生地Bを読み込みました');
-  });
+  state.B.tex = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(state.B.tex); applyParamsToTexture('B'); applyAssignments(); msg('生地Bを読み込みました'); });
 });
 $('texC').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
-  state.C.tex = texLoader.load(URL.createObjectURL(f), ()=>{
-    prepTexture(state.C.tex); applyParamsToTexture('C'); applyAssignments(); msg('生地Cを読み込みました');
-  });
+  state.C.tex = texLoader.load(URL.createObjectURL(f), ()=>{ prepTexture(state.C.tex); applyParamsToTexture('C'); applyAssignments(); msg('生地Cを読み込みました'); });
 });
 
 /* クリアA/B/C（画像のみ外す） */
 function clearTexture(key){
-  const s = state[key];
-  s.tex = null;
-  s.fileEl.value = '';
-  applyAssignments();
-  msg(`生地${key}をクリアしました`);
+  const s = state[key]; s.tex = null; s.fileEl.value = ''; applyAssignments(); msg(`生地${key}をクリアしました`);
 }
 $('clearA').addEventListener('click', ()=>clearTexture('A'));
 $('clearB').addEventListener('click', ()=>clearTexture('B'));
@@ -413,10 +387,7 @@ $('resetAll').addEventListener('click', ()=>{
   hidePicker();
   Object.keys(assign).forEach(k=>assign[k]='—');
   ['A','B','C'].forEach(key=>{
-    const s = state[key];
-    s.repeat = 3; s.rotDeg = 0;
-    s.repEl.value = 3; s.rotEl.value = 0;
-    s.repv.textContent = '3'; s.rotv.textContent = '0';
+    const s = state[key]; s.repeat = 3; s.rotDeg = 0; s.repEl.value = 3; s.rotEl.value = 0; s.repv.textContent = '3'; s.rotv.textContent = '0';
   });
   targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
   buildMatList();
@@ -425,11 +396,7 @@ $('resetAll').addEventListener('click', ()=>{
 
 /* パネル開閉（保存つき） */
 const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
-function setCollapsed(v){
-  uiWrap.classList.toggle('collapsed', v);
-  uiToggle.textContent = v ? '›' : '‹';
-  localStorage.setItem('uiCollapsed', v ? '1' : '0');
-}
+function setCollapsed(v){ uiWrap.classList.toggle('collapsed', v); uiToggle.textContent = v ? '›' : '‹'; localStorage.setItem('uiCollapsed', v ? '1' : '0'); }
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
 setCollapsed(localStorage.getItem('uiCollapsed')==='1');
 
