@@ -1,0 +1,216 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fabric Viewer (CDN Failover)</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial}
+  #ui{position:fixed;z-index:2;top:10px;left:10px;background:#0b0b0bcc;color:#fff;padding:12px 12px 8px;border-radius:10px;backdrop-filter:blur(6px)}
+  #ui h1{font-size:14px;margin:0 0 8px 0;font-weight:600;opacity:.9}
+  #ui label{display:block;font-size:12px;margin:6px 0 4px}
+  #ui input[type="file"]{font-size:12px}
+  #ui input[type="range"]{width:220px}
+  #ui .row{display:flex;gap:8px;align-items:center}
+  #ui small{opacity:.8}
+  #msg{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px}
+  #footer{position:fixed;right:10px;bottom:10px;z-index:2;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
+  button{border:1px solid #ffffff44;background:#ffffff10;color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer}
+  button:hover{background:#ffffff18}
+  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  #debug{position:fixed;z-index:3;right:10px;top:10px;background:#000c;color:#0f0;padding:6px 8px;border-radius:6px;font:12px/1.2 monospace;max-width:40ch;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>Fabric Viewer</h1>
+  <label>生地画像アップ（JPG/PNG）</label>
+  <input type="file" id="file" accept="image/*">
+  <div class="row">
+    <label style="min-width:78px;">タイル倍率</label>
+    <input type="range" id="repeat" min="1" max="12" step="0.5" value="3">
+    <span id="repv" style="width:24px;display:inline-block;text-align:right">3</span>
+  </div>
+  <div class="row">
+    <label style="min-width:78px;">回転（度）</label>
+    <input type="range" id="rot" min="0" max="180" step="1" value="0">
+    <span id="rotv" style="width:24px;display:inline-block;text-align:right">0</span>
+  </div>
+  <div class="row" style="margin-top:6px;">
+    <button id="resetCam">カメラリセット</button>
+    <small id="matinfo"></small>
+  </div>
+  <div style="margin-top:6px;"><small>※ `assets/garment.glb` を置くと服モデルで表示。無い間はキューブ。</small></div>
+</div>
+<div id="footer">ドラッグで回転 / ホイールでズーム / 右ドラッグで移動</div>
+<div id="msg" hidden></div>
+<div id="debug">loading…</div>
+<canvas id="c"></canvas>
+
+<script>
+const debug = (s)=>{ document.getElementById('debug').textContent = s; };
+const cdns = {
+  three: [
+    "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js",
+    "https://unpkg.com/three@0.161.0/build/three.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.161.0/three.min.js",
+    // ← 追加（GitHub Raw）
+    "https://raw.githubusercontent.com/mrdoob/three.js/r161/build/three.min.js"
+  ],
+  gltf: [
+    "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js",
+    "https://unpkg.com/three@0.161.0/examples/js/loaders/GLTFLoader.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.161.0/examples/js/loaders/GLTFLoader.js",
+    // ← 追加
+    "https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/loaders/GLTFLoader.js"
+  ],
+  orbit: [
+    "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js",
+    "https://unpkg.com/three@0.161.0/examples/js/controls/OrbitControls.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.161.0/examples/js/controls/OrbitControls.js",
+    // ← 追加
+    "https://raw.githubusercontent.com/mrdoob/three.js/r161/examples/js/controls/OrbitControls.js"
+  ]
+};
+
+
+
+function loadOne(urls){
+  return new Promise((resolve, reject)=>{
+    let i = 0;
+    const tryNext = ()=>{
+      if(i >= urls.length) return reject(new Error("all cdns failed"));
+      const url = urls[i++]; debug("loading: " + url);
+      const s = document.createElement('script');
+      s.src = url; s.onload = ()=>resolve(url); s.onerror = tryNext;
+      document.head.appendChild(s);
+    };
+    tryNext();
+  });
+}
+
+(async ()=>{
+  try{
+    await loadOne(cdns.three);
+    await loadOne(cdns.gltf);
+    await loadOne(cdns.orbit);
+    debug("libs loaded. init…");
+    start(); // three.js 初期化へ
+  }catch(e){
+    debug("CDN全滅: " + e.message + "\n社内ネットのフィルタの可能性。\n後で“ローカル同梱版”にします。");
+  }
+})();
+
+function start(){
+  // ---- 設定 ----
+  const SHOULD_APPLY_TO_ALL = true;
+  const GLB_PATH = './assets/garment.glb';
+
+  // ---- 基本セットアップ ----
+  const canvas = document.querySelector('#c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x141414);
+  const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+  scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
+  const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
+
+  // ---- モデル or プレースホルダー ----
+  let model, targetMats = [];
+  const loader = new THREE.GLTFLoader();
+  loader.load(GLB_PATH, (glb)=>{
+    model = glb.scene; scene.add(model); analyzeMaterials(model); fitCamera(model);
+    showMsg('garment.glb を読み込みました');
+    debug("model ok");
+  }, undefined, ()=>{
+    const geo = new THREE.BoxGeometry(1,1.2,0.5);
+    const mat = new THREE.MeshStandardMaterial({color:0x999999, metalness:0.1, roughness:0.7});
+    const cube = new THREE.Mesh(geo, mat); scene.add(cube);
+    targetMats = [cube.material]; updateMatInfo();
+    showMsg('assets/garment.glb が無いのでキューブを表示しています');
+    debug("placeholder cube");
+  });
+
+  function analyzeMaterials(root){
+    const mats = new Set();
+    root.traverse(o=>{
+      if(o.isMesh && o.material){
+        if (Array.isArray(o.material)) o.material.forEach(m=>mats.add(m)); else mats.add(o.material);
+      }
+    });
+    targetMats = Array.from(mats).filter(m => (m.name||'').startsWith('fabric_') && m.isMeshStandardMaterial);
+    if (!targetMats.length && SHOULD_APPLY_TO_ALL){
+      targetMats = Array.from(mats).filter(m => m.isMeshStandardMaterial);
+    }
+    updateMatInfo();
+  }
+  function updateMatInfo(){ document.getElementById('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
+  function fitCamera(obj){
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3()).length();
+    const center = box.getCenter(new THREE.Vector3());
+    controls.target.copy(center);
+    const dist = size * 0.6 / Math.tan((Math.PI * camera.fov) / 360);
+    camera.position.copy(center.clone().add(new THREE.Vector3(0, size*0.1, dist)));
+    camera.near = size / 100; camera.far = size * 10; camera.updateProjectionMatrix(); controls.update();
+  }
+
+  // ---- 生地アップ / タイル / 回転 ----
+  const texLoader = new THREE.TextureLoader();
+  const repeatEl = document.getElementById('repeat');
+  const rotEl = document.getElementById('rot');
+  const repv = document.getElementById('repv');
+  const rotv = document.getElementById('rotv');
+  function applyTexture(url){
+    const t = texLoader.load(url, ()=>{
+      if (t.colorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      updateTiling(); showMsg('生地テクスチャを適用しました');
+    });
+    targetMats.forEach(m=>{
+      if (m.isMeshStandardMaterial){
+        m.map = t; m.needsUpdate = true;
+        if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.15);
+        if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.6);
+      }
+    });
+  }
+  function updateTiling(){
+    repv.textContent = repeatEl.value; rotv.textContent = rotEl.value;
+    targetMats.forEach(m=>{
+      if (m.map){ m.map.repeat.set(parseFloat(repeatEl.value), parseFloat(repeatEl.value));
+        m.map.rotation = parseFloat(rotEl.value) * Math.PI/180; m.map.center.set(0.5,0.5); m.map.needsUpdate = true; }
+    });
+  }
+  document.getElementById('file').addEventListener('change', e=>{
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    applyTexture(URL.createObjectURL(f));
+  });
+  repeatEl.addEventListener('input', updateTiling);
+  rotEl.addEventListener('input', updateTiling);
+  document.getElementById('resetCam').addEventListener('click', ()=>{
+    if (model) fitCamera(model); else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
+  });
+
+  // ---- ループ ----
+  function resize(){
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width!==w || canvas.height!==h){
+      renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+    }
+  }
+  function animate(){ resize(); controls.update(); renderer.render(scene, camera); requestAnimationFrame(animate); }
+  animate();
+
+  let msgTimer;
+  function showMsg(s){ const el = document.getElementById('msg'); el.textContent = s; el.hidden = false;
+    clearTimeout(msgTimer); msgTimer = setTimeout(()=>{ el.hidden = true; }, 3000); }
+
+  debug("running");
+}
+</script>
+</body>
+</html>
