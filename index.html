@@ -251,10 +251,11 @@ function updatePickerThumbs(){
 }
 
 function showPickerForMat(mat, clientX, clientY, title){
+  // 追加：以前の選択を解除（赤を消す）
+  if (pickerMat && pickerMat !== mat) setMatHighlight(pickerMat, false);
+
   pickerMat = mat;
   updatePickerThumbs();
-
-  // 一旦表示してサイズ取得→画面内に収める
   picker.style.display = 'block';
   const r = picker.getBoundingClientRect();
   let x = clientX + 10, y = clientY + 10, pad=8;
@@ -264,14 +265,13 @@ function showPickerForMat(mat, clientX, clientY, title){
   picker.style.top  = y + 'px';
   pickerTitle.textContent = title || 'パーツに割り当て';
 
-  // 現在の割り当てハイライト
   picker.querySelectorAll('button[data-slot]').forEach(btn=>{
     btn.classList.toggle('active', assign[mat.uuid] === btn.dataset.slot);
   });
 
-  // ハイライトON
   setMatHighlight(mat, true);
 }
+
 function hidePicker(){
   picker.style.display = 'none';
   if (pickerMat) { setMatHighlight(pickerMat, false); pickerMat = null; }
@@ -294,24 +294,27 @@ document.addEventListener('pointerdown', (e)=>{
 /* ====== Raycaster で 3D パーツをクリック ====== */
 const ray = new THREE.Raycaster(); const pt = new THREE.Vector2();
 canvas.addEventListener('pointerdown',(e)=>{
-  // ← 重要：外側クローズの pointerdown が走らないように止める
   e.stopPropagation();
 
+  // 追加：前の吹き出し＆ハイライトをクリア
+  hidePicker();
+
   const rect=canvas.getBoundingClientRect();
-  pt.x=((e.clientX-rect.left)/rect.width)*2-1; pt.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  pt.x=((e.clientX-rect.left)/rect.width)*2-1;
+  pt.y=-((e.clientY-rect.top)/rect.height)*2+1;
   ray.setFromCamera(pt,camera);
   const root = model || scene;
   const hit = ray.intersectObject(root,true)[0];
-  if(!hit || !hit.object){ hidePicker(); return; }
+  if(!hit || !hit.object){ return; } // ← 何も当たらなければそのまま終了
 
-  // 対象マテリアル
   let mat = hit.object.material;
   if(Array.isArray(mat)) mat = mat[ hit.face && typeof hit.face.materialIndex==='number' ? hit.face.materialIndex : 0 ];
-  if(!mat){ hidePicker(); return; }
+  if(!mat){ return; }
 
   const title = `${niceName(mat.name)} — ${mat.name||''}`;
   showPickerForMat(mat, e.clientX, e.clientY, title);
 });
+
 
 /* ====== パーツリスト（クリックで吹き出し） ====== */
 function buildMatList(){
@@ -329,11 +332,15 @@ function buildMatList(){
     const name=document.createElement('span'); name.className='name'; name.textContent = `${niceName(m.name)} ${m.name ? '— '+m.name : ''}`;
     const tag=document.createElement('span'); tag.className='tag'; tag.textContent = assign[m.uuid] || '—';
 
-    row.addEventListener('click', (ev)=>{
-      ev.stopPropagation();                   // ← 重要：即クローズを防止
-      const r = row.getBoundingClientRect();
-      showPickerForMat(m, r.right, r.top + r.height/2, `${niceName(m.name)} — ${m.name||''}`);
-    });
+row.addEventListener('click', (ev)=>{
+  ev.stopPropagation();
+  // 追加：前の吹き出し＆ハイライトをクリア
+  hidePicker();
+
+  const r = row.getBoundingClientRect();
+  showPickerForMat(m, r.right, r.top + r.height/2, `${niceName(m.name)} — ${m.name||''}`);
+});
+
     row.addEventListener('pointerenter', ()=> setMatHighlight(m, true));
     row.addEventListener('pointerleave', ()=> { if(pickerMat!==m) setMatHighlight(m, false); });
 
