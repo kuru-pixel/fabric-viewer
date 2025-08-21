@@ -14,6 +14,8 @@
   }
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
+  .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .mini{margin-left:6px;font-size:12px;padding:2px 6px}
 
   /* 開閉トグル */
   #uiToggle{
@@ -22,7 +24,6 @@
     font-size:20px;line-height:56px;text-align:center;user-select:none;
     box-shadow:0 2px 8px #0006
   }
-  /* 閉じた時：ラッパー全体を左へスライドし、タブだけ残す */
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
   /* パーツ割り当てリスト */
@@ -47,13 +48,20 @@
   <div id="ui">
     <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
 
-    <button id="resetCam" style="margin-bottom:4px;">カメラリセット</button>
-    <small id="matinfo" style="margin-left:6px;"></small>
+    <div class="btnRow">
+      <button id="resetCam">カメラリセット</button>
+      <!-- 画像は消さず「見た目/割り当て」を初期化 -->
+      <button id="resetAll" title="倍率/回転を初期化・割り当てを全て『なし』・見た目を白に戻す">リセット</button>
+      <small id="matinfo" style="margin-left:auto;"></small>
+    </div>
 
     <!-- 生地 A -->
     <div class="block">
       <h4>生地A</h4>
-      <label><input id="texA" type="file" accept="image/*"></label>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texA" type="file" accept="image/*"></label>
+        <button id="clearA" class="mini" type="button">クリアA</button>
+      </div>
       <label>タイル倍率A <input id="repeatA" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvA">3</span></label>
       <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
     </div>
@@ -61,7 +69,10 @@
     <!-- 生地 B -->
     <div class="block">
       <h4>生地B</h4>
-      <label><input id="texB" type="file" accept="image/*"></label>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texB" type="file" accept="image/*"></label>
+        <button id="clearB" class="mini" type="button">クリアB</button>
+      </div>
       <label>タイル倍率B <input id="repeatB" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvB">3</span></label>
       <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
     </div>
@@ -69,7 +80,10 @@
     <!-- 生地 C -->
     <div class="block">
       <h4>生地C</h4>
-      <label><input id="texC" type="file" accept="image/*"></label>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texC" type="file" accept="image/*"></label>
+        <button id="clearC" class="mini" type="button">クリアC</button>
+      </div>
       <label>タイル倍率C <input id="repeatC" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvC">3</span></label>
       <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
     </div>
@@ -156,9 +170,9 @@ function fit(obj){
 /* ===== テクスチャ状態（A/B/C ごと） ===== */
 const texLoader = new THREE.TextureLoader();
 const state = {
-  A:{ tex:null, repeat:3, rotDeg:0, repEl:repeatA, rotEl:rotA, repv:repvA, rotv:rotvA },
-  B:{ tex:null, repeat:3, rotDeg:0, repEl:repeatB, rotEl:rotB, repv:repvB, rotv:rotvB },
-  C:{ tex:null, repeat:3, rotDeg:0, repEl:repeatC, rotEl:rotC, repv:repvC, rotv:rotvC },
+  A:{ tex:null, repeat:3, rotDeg:0, repEl:repeatA, rotEl:rotA, repv:repvA, rotv:rotvA, fileEl:texA },
+  B:{ tex:null, repeat:3, rotDeg:0, repEl:repeatB, rotEl:rotB, repv:repvB, rotv:rotvB, fileEl:texB },
+  C:{ tex:null, repeat:3, rotDeg:0, repEl:repeatC, rotEl:rotC, repv:repvC, rotv:rotvC, fileEl:texC },
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 
@@ -168,8 +182,6 @@ function prepTexture(t){
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
-
-/* key: 'A'|'B'|'C' のパラメータをテクスチャに反映 */
 function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
@@ -179,7 +191,7 @@ function applyParamsToTexture(key){
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
-/* パーツ割り当てを反映（なしは真っ白に） */
+/* 割り当て反映（なしは真っ白に） */
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
@@ -194,7 +206,7 @@ function applyAssignments(){
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
-/* パーツ割り当て UI を構築 */
+/* UI 構築（A/B/C 割り当て） */
 function buildMatList(){
   const box = document.getElementById('matList'); if(!box) return;
   box.innerHTML='';
@@ -224,7 +236,7 @@ document.getElementById('resetCam').addEventListener('click', ()=>{
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
 
-/* 画像読込 */
+/* 画像ロード */
 texA.addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   state.A.tex = texLoader.load(URL.createObjectURL(f), ()=>{
@@ -244,13 +256,41 @@ texC.addEventListener('change', e=>{
   });
 });
 
-/* スライダー（A/B/C個別） */
-repeatA.addEventListener('input', ()=>{ state.A.repeat=repeatA.value; applyParamsToTexture('A'); });
-rotA.addEventListener('input',    ()=>{ state.A.rotDeg=rotA.value;   applyParamsToTexture('A'); });
-repeatB.addEventListener('input', ()=>{ state.B.repeat=repeatB.value; applyParamsToTexture('B'); });
-rotB.addEventListener('input',    ()=>{ state.B.rotDeg=rotB.value;   applyParamsToTexture('B'); });
-repeatC.addEventListener('input', ()=>{ state.C.repeat=repeatC.value; applyParamsToTexture('C'); });
-rotC.addEventListener('input',    ()=>{ state.C.rotDeg=rotC.value;   applyParamsToTexture('C'); });
+/* ★ 画像だけ外す（A/B/C クリア） */
+function clearTexture(key){
+  const s = state[key];
+  s.tex = null;                 // テクスチャだけ無効化
+  s.fileEl.value = '';          // ファイル入力も空に
+  applyAssignments();           // 割り当てはそのまま => 見た目は白に
+  msg(`生地${key}をクリアしました`);
+}
+document.getElementById('clearA').addEventListener('click', ()=>clearTexture('A'));
+document.getElementById('clearB').addEventListener('click', ()=>clearTexture('B'));
+document.getElementById('clearC').addEventListener('click', ()=>clearTexture('C'));
+
+/* ★ 見た目を初期状態に戻す（画像は残す） */
+document.getElementById('resetAll').addEventListener('click', ()=>{
+  // 1) 割り当てを全て「—」
+  Object.keys(assign).forEach(k=>assign[k]='—');
+
+  // 2) 各スロットの倍率・回転を初期化（画像は保持）
+  ['A','B','C'].forEach(key=>{
+    const s = state[key];
+    s.repeat = 3; s.rotDeg = 0;
+    s.repEl.value = 3; s.rotEl.value = 0;
+    s.repv.textContent = '3'; s.rotv.textContent = '0';
+  });
+
+  // 3) 3D見た目を白（mapを外す）
+  targetMats.forEach(m=>{
+    if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; }
+  });
+
+  // 4) UIセレクトを更新
+  buildMatList();
+
+  msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
+});
 
 /* ===== 開閉トグル（状態保存つき） ===== */
 const uiWrap = document.getElementById('uiWrap');
