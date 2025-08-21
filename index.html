@@ -86,10 +86,13 @@ let model;
 let targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
+  model=glb.scene; scene.add(model); analyze(model);
+  forceWhiteBase();          // ★ 追加：初期表示は真っ白
+  fit(model); msg('garment.glb を読み込みました');
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
-  const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
+  // ★ 白いキューブに変更
+  const m=new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.0,roughness:0.9});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo(); buildMatList();
   msg('assets/garment.glb が無いのでキューブ表示');
@@ -109,9 +112,22 @@ function analyze(root){
   updateMatInfo();
   buildMatList();
 }
-
 function updateMatInfo(){
   document.getElementById('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`;
+}
+
+/* ===== 初期状態を真っ白にする ===== */
+function forceWhiteBase(){
+  const matsFabric = targetMats.filter(m => (m.name||'').toLowerCase().startsWith('fabric'));
+  const mats = matsFabric.length ? matsFabric : targetMats;
+  mats.forEach(m=>{
+    if(!m) return;
+    if('map' in m) m.map = null;        // 画像解除
+    if(m.color) m.color.set(0xffffff);  // 白
+    if(typeof m.metalness==='number') m.metalness = 0.0;
+    if(typeof m.roughness==='number') m.roughness = 0.9;
+    m.needsUpdate = true;
+  });
 }
 
 /* ===== カメラ合わせ ===== */
@@ -152,7 +168,6 @@ function applyParamsToTexture(key){
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
   t.center.set(0.5,0.5);
   t.needsUpdate = true;
-  // すでにこのテクスチャを使っているマテリアルの更新
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
@@ -174,7 +189,6 @@ function applyAssignments(){
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
-  // 反映後に各テクスチャのパラメータを再適用
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
