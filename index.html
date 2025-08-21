@@ -9,29 +9,21 @@
   /* ==== UI（開閉スライド対応） ==== */
   #uiWrap{position:fixed;z-index:2;top:10px;left:10px;display:flex;align-items:flex-start;
           transition:transform .25s ease}
-  #ui{
-    background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px
-  }
+  #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px}
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
   .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
   .mini{margin-left:6px;font-size:12px;padding:2px 6px}
 
-  /* 開閉トグル */
-  #uiToggle{
-    margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;
+  #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;
     width:32px;height:56px;border-radius:8px;background:#e23;color:#fff;
-    font-size:20px;line-height:56px;text-align:center;user-select:none;
-    box-shadow:0 2px 8px #0006
-  }
+    font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
-  /* パーツ割り当てリスト */
   #matList > div{display:flex;gap:8px;align-items:center;margin:4px 0}
   #matList .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
   #matList select{background:#223;color:#fff;border:1px solid #445;border-radius:6px;padding:3px 6px}
 
-  /* A/B/C ブロック */
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
   .block h4{margin:0 0 4px 0;font-size:13px}
 
@@ -43,19 +35,17 @@
 </style>
 </head><body>
 
-<!-- 開閉スライドする UI -->
 <div id="uiWrap">
   <div id="ui">
     <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
 
     <div class="btnRow">
       <button id="resetCam">カメラリセット</button>
-      <!-- 画像は消さず「見た目/割り当て」を初期化 -->
       <button id="resetAll" title="倍率/回転を初期化・割り当てを全て『なし』・見た目を白に戻す">リセット</button>
       <small id="matinfo" style="margin-left:auto;"></small>
     </div>
 
-    <!-- 生地 A -->
+    <!-- A -->
     <div class="block">
       <h4>生地A</h4>
       <div class="btnRow">
@@ -66,7 +56,7 @@
       <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
     </div>
 
-    <!-- 生地 B -->
+    <!-- B -->
     <div class="block">
       <h4>生地B</h4>
       <div class="btnRow">
@@ -77,7 +67,7 @@
       <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
     </div>
 
-    <!-- 生地 C -->
+    <!-- C -->
     <div class="block">
       <h4>生地C</h4>
       <div class="btnRow">
@@ -97,7 +87,6 @@
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示</small></div>
   </div>
 
-  <!-- 開閉トグル（赤いタブ） -->
   <button id="uiToggle" aria-label="toggle panel">‹</button>
 </div>
 
@@ -110,11 +99,12 @@
 <script src="./assets/threejs/OrbitControls.js"></script>
 
 <script>
-/* ===== 基本設定 ===== */
+/* ========= 基本 ========= */
 const GLB_PATH = './assets/garment.glb';
+const $ = (id)=>document.getElementById(id);
 
-/* ===== three.js 初期化 ===== */
-const canvas = document.querySelector('#c');
+/* three.js */
+const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
 if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -124,9 +114,8 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
-/* ===== モデル読込 ===== */
-let model;
-let targetMats = [];
+/* モデル */
+let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
   model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
@@ -138,7 +127,7 @@ loader.load(GLB_PATH, (glb)=>{
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
-/* ===== マテリアル抽出 ===== */
+/* マテリアル抽出 */
 function analyze(root){
   const mats=new Set();
   root.traverse(o=>{
@@ -149,14 +138,11 @@ function analyze(root){
   targetMats = Array.from(mats).filter(m =>
     (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial))
   );
-  updateMatInfo();
-  buildMatList();
+  updateMatInfo(); buildMatList();
 }
-function updateMatInfo(){
-  document.getElementById('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`;
-}
+function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
 
-/* ===== カメラ合わせ ===== */
+/* カメラ */
 function fit(obj){
   const box=new THREE.Box3().setFromObject(obj),
         size=box.getSize(new THREE.Vector3()).length(),
@@ -167,12 +153,12 @@ function fit(obj){
   camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* ===== テクスチャ状態（A/B/C ごと） ===== */
+/* A/B/C の状態 */
 const texLoader = new THREE.TextureLoader();
 const state = {
-  A:{ tex:null, repeat:3, rotDeg:0, repEl:repeatA, rotEl:rotA, repv:repvA, rotv:rotvA, fileEl:texA },
-  B:{ tex:null, repeat:3, rotDeg:0, repEl:repeatB, rotEl:rotB, repv:repvB, rotv:rotvB, fileEl:texB },
-  C:{ tex:null, repeat:3, rotDeg:0, repEl:repeatC, rotEl:rotC, repv:repvC, rotv:rotvC, fileEl:texC },
+  A:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA') },
+  B:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatB'), rotEl:$('rotB'), repv:$('repvB'), rotv:$('rotvB'), fileEl:$('texB') },
+  C:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatC'), rotEl:$('rotC'), repv:$('repvC'), rotv:$('rotvC'), fileEl:$('texC') },
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 
@@ -182,16 +168,17 @@ function prepTexture(t){
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
+
 function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
   t.center.set(0.5,0.5); t.needsUpdate = true;
+  // 割り当て済みのマテリアルも更新
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
-/* 割り当て反映（なしは真っ白に） */
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
@@ -206,9 +193,9 @@ function applyAssignments(){
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
-/* UI 構築（A/B/C 割り当て） */
+/* 割り当て UI */
 function buildMatList(){
-  const box = document.getElementById('matList'); if(!box) return;
+  const box = $('matList'); if(!box) return;
   box.innerHTML='';
   targetMats.forEach(m=>{
     if(!(m.uuid in assign)){
@@ -230,71 +217,66 @@ function buildMatList(){
   });
 }
 
-/* ===== UIイベント ===== */
-document.getElementById('resetCam').addEventListener('click', ()=>{
+/* UI: カメラ / ファイル読込 */
+$('resetCam').addEventListener('click', ()=>{
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
-
-/* 画像ロード */
-texA.addEventListener('change', e=>{
+$('texA').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   state.A.tex = texLoader.load(URL.createObjectURL(f), ()=>{
     prepTexture(state.A.tex); applyParamsToTexture('A'); applyAssignments(); msg('生地Aを読み込みました');
   });
 });
-texB.addEventListener('change', e=>{
+$('texB').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   state.B.tex = texLoader.load(URL.createObjectURL(f), ()=>{
     prepTexture(state.B.tex); applyParamsToTexture('B'); applyAssignments(); msg('生地Bを読み込みました');
   });
 });
-texC.addEventListener('change', e=>{
+$('texC').addEventListener('change', e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   state.C.tex = texLoader.load(URL.createObjectURL(f), ()=>{
     prepTexture(state.C.tex); applyParamsToTexture('C'); applyAssignments(); msg('生地Cを読み込みました');
   });
 });
 
-/* ★ 画像だけ外す（A/B/C クリア） */
+/* クリアA/B/C（画像のみ外す） */
 function clearTexture(key){
   const s = state[key];
-  s.tex = null;                 // テクスチャだけ無効化
-  s.fileEl.value = '';          // ファイル入力も空に
-  applyAssignments();           // 割り当てはそのまま => 見た目は白に
+  s.tex = null;
+  s.fileEl.value = '';
+  applyAssignments();
   msg(`生地${key}をクリアしました`);
 }
-document.getElementById('clearA').addEventListener('click', ()=>clearTexture('A'));
-document.getElementById('clearB').addEventListener('click', ()=>clearTexture('B'));
-document.getElementById('clearC').addEventListener('click', ()=>clearTexture('C'));
+$('clearA').addEventListener('click', ()=>clearTexture('A'));
+$('clearB').addEventListener('click', ()=>clearTexture('B'));
+$('clearC').addEventListener('click', ()=>clearTexture('C'));
 
-/* ★ 見た目を初期状態に戻す（画像は残す） */
-document.getElementById('resetAll').addEventListener('click', ()=>{
-  // 1) 割り当てを全て「—」
+/* スライダー：値→状態→テクスチャに反映 */
+state.A.repEl.addEventListener('input', ()=>{ state.A.repeat = Number(state.A.repEl.value); applyParamsToTexture('A'); });
+state.A.rotEl.addEventListener('input', ()=>{ state.A.rotDeg = Number(state.A.rotEl.value); applyParamsToTexture('A'); });
+state.B.repEl.addEventListener('input', ()=>{ state.B.repeat = Number(state.B.repEl.value); applyParamsToTexture('B'); });
+state.B.rotEl.addEventListener('input', ()=>{ state.B.rotDeg = Number(state.B.rotEl.value); applyParamsToTexture('B'); });
+state.C.repEl.addEventListener('input', ()=>{ state.C.repeat = Number(state.C.repEl.value); applyParamsToTexture('C'); });
+state.C.rotEl.addEventListener('input', ()=>{ state.C.rotDeg = Number(state.C.rotEl.value); applyParamsToTexture('C'); });
+
+/* 表示リセット（画像は残す） */
+$('resetAll').addEventListener('click', ()=>{
   Object.keys(assign).forEach(k=>assign[k]='—');
-
-  // 2) 各スロットの倍率・回転を初期化（画像は保持）
   ['A','B','C'].forEach(key=>{
     const s = state[key];
     s.repeat = 3; s.rotDeg = 0;
     s.repEl.value = 3; s.rotEl.value = 0;
     s.repv.textContent = '3'; s.rotv.textContent = '0';
   });
-
-  // 3) 3D見た目を白（mapを外す）
-  targetMats.forEach(m=>{
-    if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; }
-  });
-
-  // 4) UIセレクトを更新
+  targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
   buildMatList();
-
   msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
 });
 
-/* ===== 開閉トグル（状態保存つき） ===== */
-const uiWrap = document.getElementById('uiWrap');
-const uiToggle = document.getElementById('uiToggle');
+/* パネル開閉（保存つき） */
+const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
 function setCollapsed(v){
   uiWrap.classList.toggle('collapsed', v);
   uiToggle.textContent = v ? '›' : '‹';
@@ -303,12 +285,12 @@ function setCollapsed(v){
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
 setCollapsed(localStorage.getItem('uiCollapsed')==='1');
 
-/* ===== ループ ===== */
+/* ループ */
 function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight;
   if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
 function loop(){ resize(); controls.update(); renderer.render(scene,camera); requestAnimationFrame(loop); } loop();
 
-/* ===== メッセージ ===== */
-let t; function msg(s){ const el=document.getElementById('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+/* メッセージ */
+let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
 </script>
 </body></html>
