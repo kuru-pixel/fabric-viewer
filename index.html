@@ -135,17 +135,29 @@ loader.load(GLB_PATH, (glb)=>{
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
-/* マテリアル抽出 */
+/* ===== ユーティリティ ===== */
+function isSupportedMat(m){
+  return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
+}
+
+/* マテリアル抽出（使用数カウントつき） */
+const materialUseCount = new Map();  // material.uuid -> 参照数
 function analyze(root){
   const mats=new Set();
+  materialUseCount.clear();
   root.traverse(o=>{
     if(o.isMesh && o.material){
-      Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);
+      if(Array.isArray(o.material)){
+        o.material.forEach(m=>{
+          if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
+        });
+      }else{
+        const m=o.material;
+        if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
+      }
     }
   });
-  targetMats = Array.from(mats).filter(m =>
-    (m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial))
-  );
+  targetMats = Array.from(mats).filter(isSupportedMat);
   updateMatInfo();
 }
 function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
@@ -189,7 +201,7 @@ function applyParamsToTexture(key){
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
-    if(m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)){
+    if(isSupportedMat(m)){
       if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
       else { m.map = tex; }
       m.needsUpdate = true;
@@ -236,24 +248,12 @@ state.B.rotEl.addEventListener('input', ()=>{ state.B.rotDeg = Number(state.B.ro
 state.C.repEl.addEventListener('input', ()=>{ state.C.repeat = Number(state.C.repEl.value); applyParamsToTexture('C'); });
 state.C.rotEl.addEventListener('input', ()=>{ state.C.rotDeg = Number(state.C.rotEl.value); applyParamsToTexture('C'); });
 
-/* 表示リセット（画像は残す） */
-$('resetAll').addEventListener('click', ()=>{
-  Object.keys(assign).forEach(k=>assign[k]='—');
-  ['A','B','C'].forEach(key=>{
-    const s = state[key];
-    s.repeat = 3; s.rotDeg = 0;
-    s.repEl.value = 3; s.rotEl.value = 0;
-    s.repv.textContent = '3'; s.rotv.textContent = '0';
-  });
-  targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
-  msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
-});
-
 /* ===== クリックでパーツ選択 → 吹き出し ===== */
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let pick = null;               // 現在選択中の Mesh
 let overlay = null;            // 赤ハイライト用
+let pickMatIndex = null;       // クリック面の materialIndex
 const bubble = $('bubble');
 const pickA = $('pickA'), pickB = $('pickB'), pickC = $('pickC'), pickNone = $('pickNone');
 
@@ -303,9 +303,11 @@ function onCanvasClick(ev){
   const hits = ray.intersectObjects(targets, true);
   const hit = hits.find(h => h.object && (h.object.material));
 
-  if(!hit){ pick=null; hideHighlight(); hideBubble(); return; }
+  if(!hit){ pick=null; pickMatIndex=null; hideHighlight(); hideBubble(); return; }
 
   pick = hit.object;
+  pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number')
+    ? hit.face.materialIndex : null;  // ← クリック面の materialIndex を記録
   showHighlight(pick);
 
   // 吹き出し表示位置（少し上にずらす）
@@ -313,18 +315,57 @@ function onCanvasClick(ev){
   setBubbleScreenPos(wp);
   bubble.style.display='block';
 
-  // クリックしてもカメラ操作が暴発しないように一瞬だけ damp 無効
   controls.update();
 }
 canvas.addEventListener('pointerdown', onCanvasClick);
 
-/* 吹き出しボタン → 割り当て */
+/* 同じMaterialを他メッシュと共有していたら、その場でクローンして専有化 */
+function ensureUniqueMaterialOnMesh(mesh, idx){
+  if(Array.isArray(mesh.material)){
+    const old = mesh.material[idx];
+    if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone();
+      mesh.material[idx] = clone;
+      materialUseCount.set(old.uuid, count-1);
+      materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone);
+      return clone;
+    }
+    return old;
+  }else{
+    const old = mesh.material;
+    if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone();
+      mesh.material = clone;
+      materialUseCount.set(old.uuid, count-1);
+      materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone);
+      return clone;
+    }
+    return old;
+  }
+}
+
+/* 吹き出しボタン → 割り当て（クリック面のサブマテリアル “だけ”） */
 function assignToSelected(key){
   if(!pick || !pick.material) return;
-  const ids = Array.isArray(pick.material) ? pick.material.map(m=>m.uuid) : [pick.material.uuid];
-  ids.forEach(id => { assign[id] = key; });
+
+  let mat = null;
+  if(Array.isArray(pick.material)){
+    const idx = (pickMatIndex!=null) ? pickMatIndex : 0;   // faceから特定。無ければ0番にフォールバック
+    mat = ensureUniqueMaterialOnMesh(pick, idx);
+  }else{
+    mat = ensureUniqueMaterialOnMesh(pick, 0);
+  }
+  if(!mat) return;
+
+  assign[mat.uuid] = key;   // ← このマテリアルだけ記録
   applyAssignments();
-  // 操作後も選択中パーツだけ赤、他は消える（= showHighlightで既に一個制御）
+  // 操作後も選択中パーツだけ赤（ハイライトは維持）
 }
 pickA.onclick   = ()=>assignToSelected('A');
 pickB.onclick   = ()=>assignToSelected('B');
