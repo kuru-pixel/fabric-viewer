@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Fabric Viewer (Failsafe)</title>
+<title>Fabric Viewer (UV-failsafe)</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
@@ -105,14 +105,14 @@
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
 
-<!-- three.js -->
-<script src="./assets/threejs/three.min.js"></script>
-<script src="./assets/threejs/GLTFLoader.js"></script>
-<script src="./assets/threejs/OrbitControls.js"></script>
+<!-- three.js（キャッシュバスター付き） -->
+<script src="./assets/threejs/three.min.js?v=20250822"></script>
+<script src="./assets/threejs/GLTFLoader.js?v=20250822"></script>
+<script src="./assets/threejs/OrbitControls.js?v=20250822"></script>
 
 <script>
 /* ========= 基本 ========= */
-const GLB_PATH = './assets/garment.glb';
+const GLB_PATH = './assets/garment.glb?v=20250822';
 const $ = (id)=>document.getElementById(id);
 
 /* ==== three.js 初期化（新旧互換） ==== */
@@ -130,7 +130,8 @@ const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); s
 
 /* ==== モデル/レイキャスト対象 ==== */
 let model, targetMats = [];
-let raycastTargets = []; // クリック判定対象Mesh
+let raycastTargets = [];                         // クリック判定対象Mesh
+const matUsers = new Map();                      // material.uuid -> Mesh[]（誰がそのマテリアルを使ってるか）
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
   model=glb.scene;
@@ -146,6 +147,7 @@ loader.load(GLB_PATH, (glb)=>{
   const m=new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.1,roughness:0.7});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo();
+  matUsers.set(cube.material.uuid, [cube]);
   raycastTargets=[cube];
   msg('assets/garment.glb が無いのでキューブ表示');
 });
@@ -175,16 +177,28 @@ function isSupportedMat(m){
 }
 function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
 
-/* マテリアル抽出（初期は真っ白に） */
+/* マテリアル抽出（←初期は“白にしない”：元の見た目を維持） */
 function analyze(root){
   const mats=new Set();
   root.traverse(o=>{
     if(o.isMesh && o.material){
-      Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);
+      if(Array.isArray(o.material)){
+        o.material.forEach(m=>{
+          if(isSupportedMat(m)){ mats.add(m);
+            const arr = matUsers.get(m.uuid) || [];
+            arr.push(o); matUsers.set(m.uuid, arr);
+          }
+        });
+      }else{
+        const m=o.material;
+        if(isSupportedMat(m)){ mats.add(m);
+          const arr = matUsers.get(m.uuid) || [];
+          arr.push(o); matUsers.set(m.uuid, arr);
+        }
+      }
     }
   });
-  targetMats = Array.from(mats).filter(isSupportedMat);
-  targetMats.forEach(m=>{ if(m){ m.map=null; if(m.color) m.color.set(0xffffff); m.needsUpdate=true; if(m.vertexColors) m.vertexColors=false; } });
+  targetMats = Array.from(mats);
   updateMatInfo();
 }
 
@@ -229,27 +243,82 @@ function applyParamsToTexture(key){
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 
-/* ==== 単一マテリアルに即時適用 ==== */
+/* ==== UV が無いメッシュに “箱型UV” を付ける（簡易ボックス投影） ==== */
+function ensureBoxUV(mesh){
+  const g = mesh.geometry;
+  if(!g || g.attributes.uv) return false; // 既にある
+  const pos = g.attributes.position;
+  if(!pos) return false;
+  // bbox & normal
+  g.computeBoundingBox();
+  const bb = g.boundingBox.clone();
+  if(!g.attributes.normal) g.computeVertexNormals();
+  const nor = g.attributes.normal;
+
+  const count = pos.count;
+  const uv = new Float32Array(count*2);
+
+  const size = new THREE.Vector3();
+  bb.getSize(size);
+  const min = bb.min, max = bb.max;
+  const sx = size.x || 1, sy = size.y || 1, sz = size.z || 1;
+
+  for(let i=0;i<count;i++){
+    const nx = Math.abs(nor.getX(i));
+    const ny = Math.abs(nor.getY(i));
+    const nz = Math.abs(nor.getZ(i));
+    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+    let u=0, v=0;
+
+    if(nx >= ny && nx >= nz){
+      // X面優勢 → YZ で投影
+      u = (py - min.y) / sy;
+      v = (pz - min.z) / sz;
+    }else if(ny >= nx && ny >= nz){
+      // Y面優勢 → XZ
+      u = (px - min.x) / sx;
+      v = (pz - min.z) / sz;
+    }else{
+      // Z面優勢 → XY
+      u = (px - min.x) / sx;
+      v = (py - min.y) / sy;
+    }
+    uv[i*2+0] = u;
+    uv[i*2+1] = v;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.attributes.uv.needsUpdate = true;
+  return true; // 付けた
+}
+
+/* ==== 単一マテリアルに即時適用（UV確保つき） ==== */
 function applyAssignmentToMaterial(mat, slot){
-  const tex = slot && state[slot] ? state[slot].tex : null;
   if(!isSupportedMat(mat)) return;
+  const tex = slot && state[slot] ? state[slot].tex : null;
+
   if(!tex || slot==='—'){
     mat.map = null;
     if(mat.color) mat.color.set(0xffffff);
   }else{
     mat.map = tex;
     if(mat.color) mat.color.set(0xffffff);
-    if(mat.vertexColors) mat.vertexColors = false; // 黒潰れ回避
+    if(mat.vertexColors) mat.vertexColors = false; // 頂点カラー黒潰れ回避
   }
   mat.needsUpdate = true;
   if(typeof mat.metalness==='number') mat.metalness=Math.min(mat.metalness,0.15);
   if(typeof mat.roughness==='number') mat.roughness=Math.max(mat.roughness,0.6);
 }
 
-/* ==== 全体反映（保存済みassignを一括適用） ==== */
+/* ==== 全体反映（保存済みassignを一括適用、同時にUV付与） ==== */
 function applyAssignments(){
   targetMats.forEach(m=>{
     const slot = assign[m.uuid];
+    if(slot && slot!=='—'){
+      const users = matUsers.get(m.uuid) || [];
+      users.forEach(mesh=>{
+        if(ensureBoxUV(mesh)){ /* 付与した時だけトースト */ msg('UVが無いパーツに暫定UVを付与しました'); }
+      });
+    }
     applyAssignmentToMaterial(m, slot);
   });
   ['A','B','C'].forEach(applyParamsToTexture);
@@ -266,12 +335,13 @@ function showHighlight(mesh){
   const mat = new THREE.MeshBasicMaterial({
     color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false
   });
-  overlay = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
-  if(mesh.isSkinnedMesh && mesh.skeleton){ overlay.bind(mesh.skeleton); }
-  overlay.renderOrder = 9999;
-  overlay.userData.isOverlay = true;
-  overlay.raycast = ()=>{}; // 自分には当たらない
-  mesh.add(overlay);
+  const ov = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
+  if(mesh.isSkinnedMesh && mesh.skeleton){ ov.bind(mesh.skeleton); }
+  ov.renderOrder = 9999;
+  ov.userData.isOverlay = true;
+  ov.raycast = ()=>{};
+  mesh.add(ov);
+  overlay = ov;
 }
 function hideHighlight(){
   if(overlay && overlay.parent){ overlay.parent.remove(overlay); }
@@ -356,13 +426,12 @@ function handleCanvasClick(e){
 canvas.addEventListener('pointerdown', handleCanvasClick);
 window.addEventListener('pointerdown',(e)=>{ if(!picker.contains(e.target)) hidePicker(); });
 
-/* ====== 吹き出し選択：即時適用＋フォールバック（全マテリアル） ====== */
+/* ====== 吹き出し選択：即時適用＋UV自動付与＋全マテリアルフォールバック ====== */
 picker.querySelectorAll('button[data-slot]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(!pickMesh || !pickMesh.material) return;
     const slot = btn.dataset.slot; // 'A'|'B'|'C'|'—'
 
-    // スロット未読込なら警告
     if(slot!=='—' && !(state[slot] && state[slot].tex)){
       msg(`生地${slot}が未読込です。先に左パネルから画像を選択してください。`);
       return;
@@ -370,23 +439,26 @@ picker.querySelectorAll('button[data-slot]').forEach(btn=>{
 
     if(Array.isArray(pickMesh.material)){
       if(Number.isInteger(pickMatIndex)){
-        // クリック面だけ
         const m = pickMesh.material[pickMatIndex];
         assign[m.uuid] = slot;
+        if(slot!=='—') ensureBoxUV(pickMesh);
         applyAssignmentToMaterial(m, slot);
       }else{
-        // ★ materialIndexが特定できない → そのメッシュの全マテリアルへフォールバック適用
+        // materialIndex 不明 → そのメッシュの全マテリアルへ
         pickMesh.material.forEach(m=>{
           assign[m.uuid] = slot;
+          if(slot!=='—') ensureBoxUV(pickMesh);
           applyAssignmentToMaterial(m, slot);
         });
       }
     }else{
       const m = pickMesh.material;
       assign[m.uuid] = slot;
+      if(slot!=='—') ensureBoxUV(pickMesh);
       applyAssignmentToMaterial(m, slot);
     }
     hidePicker();
+    hideHighlight();
   });
 });
 
@@ -408,10 +480,9 @@ function loadTexTo(key, file){
 
   s.url = URL.createObjectURL(file);
   s.tex = texLoader.load(s.url, ()=>{
-    // 画像読み込み完了後に確実に準備
     prepTexture(s.tex);
     applyParamsToTexture(key);
-    applyAssignments();     // 既存割当へ一斉反映
+    applyAssignments();     // 既存割当へ一斉反映（この時もUV自動付与が走る）
     updatePickerThumbs();
     msg(`生地${key}を読み込みました`);
   });
