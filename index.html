@@ -8,17 +8,15 @@
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 
-  /* ==== UI（開閉スライド対応） ==== */
+  /* ==== UI（開閉スライド） ==== */
   #uiWrap{position:fixed;z-index:20;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
   #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px}
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
   .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
   .mini{margin-left:6px;font-size:12px;padding:2px 6px}
-
   #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
-
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
   .block h4{margin:0 0 4px 0;font-size:13px}
 
@@ -35,15 +33,11 @@
   #picker .row{display:flex;gap:6px}
   #picker button{
     flex:1;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;
-    background:#1d1f25;color:#fff;border:1px solid #ffffff22;border-radius:8px;cursor:pointer;
-    padding:8px;min-width:50px
+    background:#1d1f25;color:#fff;border:1px solid #ffffff22;border-radius:8px;cursor:pointer;padding:8px;min-width:50px
   }
   #picker button:hover{outline:2px solid #ff9e9e55}
   #picker button.active{outline:2px solid #ff7a7a}
-  .thumb{
-    width:48px;height:48px;border-radius:6px;background:#222 center/cover no-repeat;
-    border:1px solid #ffffff22
-  }
+  .thumb{width:48px;height:48px;border-radius:6px;background:#222 center/cover no-repeat;border:1px solid #ffffff22}
 </style>
 </head>
 <body>
@@ -93,7 +87,6 @@
 
     <div style="margin-top:6px;"><small>※ パーツをクリックして A/B/C/なし を選択してください。<br>※ <code>assets/garment.glb</code> が無い間はキューブ表示。</small></div>
   </div>
-
   <button id="uiToggle" aria-label="toggle panel">‹</button>
 </div>
 
@@ -155,14 +148,12 @@ loader.load(GLB_PATH, (glb)=>{
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
-/* ==== 余計な破片っぽいノードを非表示（名前ヒューリスティック） ==== */
+/* ==== 余計な破片非表示（名前＋極小半径） ==== */
 function tryHideGarbage(root){
   const bad = /button|default\s*button|stud|zip|zipper|rivet|fastener|helper|gizmo|cube|plane/i;
   root.traverse(o=>{
     if(o.isMesh){
-      // 名前ヒット
       if(bad.test(o.name||'')){ o.visible=false; return; }
-      // 極小半径
       if(o.geometry){
         if(!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
         const r=o.geometry.boundingSphere?.radius||0;
@@ -191,7 +182,6 @@ function analyze(root){
     }
   });
   targetMats = Array.from(mats).filter(isSupportedMat);
-  // デフォルトは白
   targetMats.forEach(m=>{ if(m && m.color) m.color.set(0xffffff); });
   updateMatInfo();
 }
@@ -218,26 +208,32 @@ function prepTexture(t){
   if(!t) return;
   if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.center.set(0.5,0.5);
+  t.flipY = false;                   // glTF系ジオメトリでも上下が合うように
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  t.needsUpdate = true;
 }
 function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
-  t.center.set(0.5,0.5); t.needsUpdate = true;
+  t.needsUpdate = true;
+  // すでにこのテクスチャが貼られているマテリアルも再描画
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
+    const key = assign[m.uuid];
+    const tex = key && state[key] ? state[key].tex : null;
+
     if(isSupportedMat(m)){
       if(!tex || key==='—'){
         m.map = null;
         if(m.color) m.color.set(0xffffff);
       }else{
         m.map = tex;
-        if(m.color) m.color.set(0xffffff); // ベースカラー乗算をリセット
+        if(m.color) m.color.set(0xffffff); // 乗算成分をリセット
       }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
@@ -271,16 +267,12 @@ function hideHighlight(){
 
 /* ====== 吹き出し ====== */
 const picker = $('picker'), pickerTitle = $('pickerTitle');
-picker.addEventListener('pointerdown', e=>e.stopPropagation()); // 中でのクリックは外閉じを止める
+picker.addEventListener('pointerdown', e=>e.stopPropagation()); // 中のクリックで外閉じしない
 
-function hidePicker(){
-  picker.style.display='none';
-  // ハイライトは保持（選択中の視覚）
-}
+function hidePicker(){ picker.style.display='none'; }
 function updatePickerThumbs(){
   ['A','B','C'].forEach(k=>{
     const s = state[k];
-    if(!s || !s.thumb) return;
     s.thumb.style.backgroundImage = s.url ? `url(${s.url})` : 'none';
   });
 }
@@ -294,7 +286,6 @@ function showPickerAt(x,y,title,mat){
   picker.style.top  = py + 'px';
   pickerTitle.textContent = title || 'パーツに割り当て';
   picker.style.display='block';
-  // active 表示
   picker.querySelectorAll('button[data-slot]').forEach(btn=>{
     btn.classList.toggle('active', assign[mat.uuid] === btn.dataset.slot);
   });
@@ -305,7 +296,7 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 
 function handleCanvasClick(e){
   hidePicker();
-  const rect = renderer.domElement.getBoundingClientRect(); // ← domElement基準
+  const rect = renderer.domElement.getBoundingClientRect();
   ndc.x = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
   ndc.y = (-(e.clientY - rect.top) / rect.height) * 2 + 1;
   ray.setFromCamera(ndc, camera);
@@ -313,7 +304,6 @@ function handleCanvasClick(e){
   const targets = raycastTargets.filter(o => o.visible && !o.userData?.isOverlay);
   const hits = ray.intersectObjects(targets, true);
   const hit = hits.find(h => h.object && h.object.material);
-
   if(!hit){ pickMesh=null; pickMatIndex=null; hideHighlight(); return; }
 
   pickMesh = hit.object;
@@ -334,12 +324,22 @@ window.addEventListener('pointerdown',(e)=>{ if(!picker.contains(e.target)) hide
 picker.querySelectorAll('button[data-slot]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(!pickMesh || !pickMesh.material) return;
+
+    // デバッグ：テクスチャ有無を表示
+    const slot = btn.dataset.slot;
+    if(slot!=='—'){
+      const hasTex = !!(state[slot] && state[slot].tex);
+      if(!hasTex){ msg(`生地${slot}が未読込です。先に左パネルから画像を選択してください。`); return; }
+    }
+
     if(Array.isArray(pickMesh.material)){
       const idx = Number.isInteger(pickMatIndex) ? pickMatIndex : 0;
       const m = pickMesh.material[idx];
-      if(m) assign[m.uuid] = btn.dataset.slot;
+      if(m) assign[m.uuid] = slot;
+      msg(`割り当て: ${slot} @ materialIndex ${idx}`);
     }else{
-      assign[pickMesh.material.uuid] = btn.dataset.slot;
+      assign[pickMesh.material.uuid] = slot;
+      msg(`割り当て: ${slot}`);
     }
     applyAssignments();
     hidePicker();
@@ -355,12 +355,10 @@ $('resetCam').addEventListener('click', ()=>{
 
 function loadTexTo(key, file){
   const s = state[key];
-
-  // 既存の解放
+  // 既存解放
   if(s.tex){
     targetMats.forEach(m=>{ if(m.map===s.tex){ m.map=null; m.needsUpdate=true; } });
-    s.tex.dispose();
-    s.tex = null;
+    s.tex.dispose(); s.tex = null;
   }
   if(s.url){ try{ URL.revokeObjectURL(s.url); }catch{} s.url=null; }
 
@@ -435,7 +433,7 @@ function reportError(err){ console.error(err); msg(`⚠ エラー: ${err && err.
 window.addEventListener('error', (ev)=>reportError(ev.error||ev.message));
 window.addEventListener('unhandledrejection', (ev)=>reportError(ev.reason||ev));
 
-/* ページ離脱時にURL/テクスチャ解放（任意） */
+/* ページ離脱時にURL/テクスチャ解放 */
 window.addEventListener('beforeunload', ()=>{
   ['A','B','C'].forEach(k=>{
     const s = state[k];
