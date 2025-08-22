@@ -115,10 +115,12 @@
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
 
-/* three.js */
+/* ==== three.js 初期化（互換対応） ==== */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
+if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+else if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x141414);
 const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
@@ -126,7 +128,7 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
-/* モデル/レイキャスト対象 */
+/* ==== モデル/レイキャスト対象 ==== */
 let model, targetMats = [];
 let raycastTargets = []; // クリック判定対象Mesh
 const loader = new THREE.GLTFLoader();
@@ -195,7 +197,7 @@ function fit(obj){
   camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* A/B/C の状態 */
+/* ==== A/B/C の状態 ==== */
 const texLoader = new THREE.TextureLoader();
 const state = {
   A:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA'), thumb:$('thA'), url:null },
@@ -204,12 +206,17 @@ const state = {
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 
+/* ==== テクスチャ準備（バージョン互換） ==== */
+function setTexSRGB(t){
+  if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+  else if ('encoding' in t) t.encoding = THREE.sRGBEncoding;
+}
 function prepTexture(t){
   if(!t) return;
-  if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
+  setTexSRGB(t);
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.center.set(0.5,0.5);
-  t.flipY = false; // glTF系でも狂いにくくする
+  t.flipY = false; // glTF由来ジオメトリでも整合が取りやすい
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
   t.needsUpdate = true;
 }
@@ -221,27 +228,35 @@ function applyParamsToTexture(key){
   t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
+
+/* ==== 単一マテリアルに即時適用（＝ここで確実に貼る） ==== */
+function applyAssignmentToMaterial(mat, slot){
+  const tex = slot && state[slot] ? state[slot].tex : null;
+  if(!isSupportedMat(mat)) return;
+
+  if(!tex || slot==='—'){
+    mat.map = null;
+    if(mat.color) mat.color.set(0xffffff);
+  }else{
+    mat.map = tex;
+    if(mat.color) mat.color.set(0xffffff);       // 色乗算リセット
+    if(mat.vertexColors) mat.vertexColors = false; // 頂点カラーが黒で潰すケース回避
+  }
+  mat.needsUpdate = true;
+  if(typeof mat.metalness==='number') mat.metalness=Math.min(mat.metalness,0.15);
+  if(typeof mat.roughness==='number') mat.roughness=Math.max(mat.roughness,0.6);
+}
+
+/* ==== 全体反映（保存済みassignを一括適用） ==== */
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid];
-    const tex = key && state[key] ? state[key].tex : null;
-    if(isSupportedMat(m)){
-      if(!tex || key==='—'){
-        m.map = null;
-        if(m.color) m.color.set(0xffffff);
-      }else{
-        m.map = tex;
-        if(m.color) m.color.set(0xffffff); // 乗算成分リセット
-      }
-      m.needsUpdate = true;
-      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
-    }
+    const slot = assign[m.uuid];
+    applyAssignmentToMaterial(m, slot);
   });
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
-/* ====== 赤ハイライト（オーバーレイMesh） ====== */
+/* ====== 赤ハイライト（オーバーレイMesh：Skinned対応） ====== */
 let pickMesh = null;
 let pickMatIndex = null;
 let overlay = null;
@@ -252,7 +267,6 @@ function showHighlight(mesh){
   const mat = new THREE.MeshBasicMaterial({
     color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false
   });
-  // SkinnedMeshでも形が追従するように種類を合わせる
   overlay = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
   if(mesh.isSkinnedMesh && mesh.skeleton){ overlay.bind(mesh.skeleton); }
   overlay.renderOrder = 9999;
@@ -267,7 +281,7 @@ function hideHighlight(){
 
 /* ====== 吹き出し ====== */
 const picker = $('picker'), pickerTitle = $('pickerTitle');
-picker.addEventListener('pointerdown', e=>e.stopPropagation()); // 中のクリックで外閉じしない
+picker.addEventListener('pointerdown', e=>e.stopPropagation());
 function hidePicker(){ picker.style.display='none'; }
 function updatePickerThumbs(){
   ['A','B','C'].forEach(k=>{
@@ -290,15 +304,15 @@ function showPickerAt(x,y,title,mat){
   });
 }
 
-/* ====== BufferGeometryでのmaterialIndex逆引き ====== */
+/* ====== BufferGeometry: faceIndex → materialIndex 逆引き ====== */
 function getMaterialIndexFromHit(hit){
   const obj = hit.object;
-  if(!Array.isArray(obj.material)) return null;
+  if(!Array.isArray(obj.material)) return null;       // 単一マテリアル
   const geom = obj.geometry;
-  const faceIndex = hit.faceIndex; // 三角形インデックス（面番号）
+  const faceIndex = hit.faceIndex;                    // 三角形番号
   if(geom && Number.isInteger(faceIndex)){
     const groups = geom.groups || [];
-    const firstIndex = faceIndex * 3; // groups.start/count は index配列のオフセット
+    const firstIndex = faceIndex * 3;                 // groups.start/count は index配列のオフセット
     for(let i=0;i<groups.length;i++){
       const g = groups[i];
       const s = g.start || 0, c = g.count || 0;
@@ -339,13 +353,12 @@ function handleCanvasClick(e){
 canvas.addEventListener('pointerdown', handleCanvasClick);
 window.addEventListener('pointerdown',(e)=>{ if(!picker.contains(e.target)) hidePicker(); });
 
-/* ====== 吹き出し内の選択 → クリックしたサブマテリアルだけに割当 ====== */
+/* ====== 吹き出し選択：即時にそのマテリアルへ適用＋保存 ====== */
 picker.querySelectorAll('button[data-slot]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(!pickMesh || !pickMesh.material) return;
-
     const slot = btn.dataset.slot; // 'A'|'B'|'C'|'—'
-    // 未読込スロットは警告して中断
+
     if(slot!=='—' && !(state[slot] && state[slot].tex)){
       msg(`生地${slot}が未読込です。先に左パネルから画像を選択してください。`);
       return;
@@ -354,11 +367,15 @@ picker.querySelectorAll('button[data-slot]').forEach(btn=>{
     if(Array.isArray(pickMesh.material)){
       const idx = Number.isInteger(pickMatIndex) ? pickMatIndex : 0;
       const m = pickMesh.material[idx];
-      if(m) assign[m.uuid] = slot;
+      if(m){
+        assign[m.uuid] = slot;
+        applyAssignmentToMaterial(m, slot); // ★ ここで即時適用
+      }
     }else{
-      assign[pickMesh.material.uuid] = slot;
+      const m = pickMesh.material;
+      assign[m.uuid] = slot;
+      applyAssignmentToMaterial(m, slot);
     }
-    applyAssignments();
     hidePicker();
   });
 });
@@ -383,7 +400,7 @@ function loadTexTo(key, file){
   s.tex = texLoader.load(s.url, ()=>{
     prepTexture(s.tex);
     applyParamsToTexture(key);
-    applyAssignments();
+    applyAssignments();     // ← 既存割り当てに一斉反映
     updatePickerThumbs();
     msg(`生地${key}を読み込みました`);
   });
@@ -392,7 +409,7 @@ $('texA').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loa
 $('texB').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexTo('B',f); });
 $('texC').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexTo('C',f); });
 
-/* クリアA/B/C（画像のみ外す） */
+/* クリアA/B/C（画像のみ外す。割当は保持） */
 function clearTexture(key){
   const s = state[key];
   targetMats.forEach(m=>{ if(m.map===s.tex){ m.map=null; m.needsUpdate=true; } });
