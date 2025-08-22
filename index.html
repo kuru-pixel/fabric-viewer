@@ -133,27 +133,41 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
-/* モデル */
+/* モデル/レイキャスト対象 */
 let model, targetMats = [];
+let raycastTargets = []; // クリック判定対象Mesh
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model);
+  model=glb.scene;
   tryHideGarbage(model);
-  analyze(model); fit(model); msg('garment.glb を読み込みました');
+  scene.add(model);
+  analyze(model);
+  raycastTargets = [];
+  model.traverse(o=>{ if(o.isMesh) raycastTargets.push(o); });
+  fit(model);
+  msg('garment.glb を読み込みました');
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
   const m=new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.1,roughness:0.7});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo();
+  raycastTargets=[cube];
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
 /* ==== 余計な破片っぽいノードを非表示（名前ヒューリスティック） ==== */
 function tryHideGarbage(root){
-  const bad = /button|default\s*button|stud|helper|gizmo|cube|plane/i;
+  const bad = /button|default\s*button|stud|zip|zipper|rivet|fastener|helper|gizmo|cube|plane/i;
   root.traverse(o=>{
-    if(o.isMesh && (bad.test(o.name||'') || (o.geometry && o.geometry.boundingSphere && o.geometry.boundingSphere.radius<0.01))){
-      o.visible=false;
+    if(o.isMesh){
+      // 名前ヒット
+      if(bad.test(o.name||'')){ o.visible=false; return; }
+      // 極小半径
+      if(o.geometry){
+        if(!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        const r=o.geometry.boundingSphere?.radius||0;
+        if(r>0 && r<0.002){ o.visible=false; }
+      }
     }
   });
 }
@@ -171,10 +185,14 @@ function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats
 /* マテリアル抽出 */
 function analyze(root){
   const mats=new Set();
-  root.traverse(o=>{ if(o.isMesh && o.material){ Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);} });
+  root.traverse(o=>{
+    if(o.isMesh && o.material){
+      Array.isArray(o.material)?o.material.forEach(m=>mats.add(m)):mats.add(o.material);
+    }
+  });
   targetMats = Array.from(mats).filter(isSupportedMat);
   // デフォルトは白
-  targetMats.forEach(m=>{ if(m && !m.map && m.color) m.color.set(0xffffff); });
+  targetMats.forEach(m=>{ if(m && m.color) m.color.set(0xffffff); });
   updateMatInfo();
 }
 
@@ -190,9 +208,9 @@ function fit(obj){
 /* A/B/C の状態 */
 const texLoader = new THREE.TextureLoader();
 const state = {
-  A:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA'), thumb:$('thA'), _url:null },
-  B:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatB'), rotEl:$('rotB'), repv:$('repvB'), rotv:$('rotvB'), fileEl:$('texB'), thumb:$('thB'), _url:null },
-  C:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatC'), rotEl:$('rotC'), repv:$('repvC'), rotv:$('rotvC'), fileEl:$('texC'), thumb:$('thC'), _url:null },
+  A:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA'), thumb:$('thA'), url:null },
+  B:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatB'), rotEl:$('rotB'), repv:$('repvB'), rotv:$('rotvB'), fileEl:$('texB'), thumb:$('thB'), url:null },
+  C:{ tex:null, repeat:3, rotDeg:0, repEl:$('repeatC'), rotEl:$('rotC'), repv:$('repvC'), rotv:$('rotvC'), fileEl:$('texC'), thumb:$('thC'), url:null },
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 
@@ -214,8 +232,13 @@ function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
     if(isSupportedMat(m)){
-      if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
-      else { m.map = tex; }
+      if(!tex || key==='—'){
+        m.map = null;
+        if(m.color) m.color.set(0xffffff);
+      }else{
+        m.map = tex;
+        if(m.color) m.color.set(0xffffff); // ベースカラー乗算をリセット
+      }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
@@ -224,121 +247,143 @@ function applyAssignments(){
   ['A','B','C'].forEach(applyParamsToTexture);
 }
 
-/* ハイライト（emissive安全版） */
-let pickerMat = null;
-function setMatHighlight(mat, on){
-  if(!isSupportedMat(mat)) return;
-  const hasEm = !!mat.emissive;
-  if(on){
-    if(!mat.userData.__prevEm && hasEm){ mat.userData.__prevEm = mat.emissive.clone(); }
-    if(hasEm){ mat.emissive.setRGB(1,0.25,0.25); mat.emissiveIntensity = 0.8; }
-  }else{
-    if(hasEm && mat.userData.__prevEm){
-      mat.emissive.copy(mat.userData.__prevEm);
-      mat.emissiveIntensity = 1.0;
-    }
-    mat.userData.__prevEm = null;
-  }
+/* ====== 赤ハイライト（オーバーレイMesh） ====== */
+let pickMesh = null;
+let pickMatIndex = null;
+let overlay = null;
+
+function showHighlight(mesh){
+  hideHighlight();
+  if(!mesh || !mesh.geometry) return;
+  const mat = new THREE.MeshBasicMaterial({
+    color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false
+  });
+  overlay = new THREE.Mesh(mesh.geometry, mat);
+  overlay.renderOrder = 9999;
+  overlay.userData.isOverlay = true;
+  overlay.raycast = ()=>{}; // 自分には当たらない
+  mesh.add(overlay);
+}
+function hideHighlight(){
+  if(overlay && overlay.parent){ overlay.parent.remove(overlay); }
+  overlay = null;
 }
 
-/* 吹き出し */
+/* ====== 吹き出し ====== */
 const picker = $('picker'), pickerTitle = $('pickerTitle');
+picker.addEventListener('pointerdown', e=>e.stopPropagation()); // 中でのクリックは外閉じを止める
+
 function hidePicker(){
   picker.style.display='none';
-  if(pickerMat){ setMatHighlight(pickerMat, false); pickerMat = null; }
+  // ハイライトは保持（選択中の視覚）
 }
 function updatePickerThumbs(){
   ['A','B','C'].forEach(k=>{
     const s = state[k];
     if(!s || !s.thumb) return;
-    if(s._url){ try{ URL.revokeObjectURL(s._url); }catch{} s._url=null; }
-    const f = s.fileEl && s.fileEl.files && s.fileEl.files[0];
-    if(f){ s._url = URL.createObjectURL(f); s.thumb.style.backgroundImage=`url(${s._url})`; }
-    else { s.thumb.style.backgroundImage='none'; }
+    s.thumb.style.backgroundImage = s.url ? `url(${s.url})` : 'none';
   });
 }
-function showPickerForMat(mat, clientX, clientY, title){
-  if(pickerMat && pickerMat!==mat) setMatHighlight(pickerMat,false);
-  if(!isSupportedMat(mat)) return;
-  pickerMat = mat;
+function showPickerAt(x,y,title,mat){
   updatePickerThumbs();
-
   const r = picker.getBoundingClientRect();
-  let x = clientX + 10, y = clientY + 10, pad = 8;
-  if (x + r.width  + pad > window.innerWidth)  x = Math.max(8, clientX - r.width  - 10);
-  if (y + r.height + pad > window.innerHeight) y = Math.max(8, clientY - r.height - 10);
-  picker.style.left = x + 'px';
-  picker.style.top  = y + 'px';
+  let px = x + 10, py = y + 10, pad = 8;
+  if (px + r.width  + pad > window.innerWidth)  px = Math.max(8, x - r.width  - 10);
+  if (py + r.height + pad > window.innerHeight) py = Math.max(8, y - r.height - 10);
+  picker.style.left = px + 'px';
+  picker.style.top  = py + 'px';
   pickerTitle.textContent = title || 'パーツに割り当て';
   picker.style.display='block';
-
   // active 表示
   picker.querySelectorAll('button[data-slot]').forEach(btn=>{
     btn.classList.toggle('active', assign[mat.uuid] === btn.dataset.slot);
   });
-  setMatHighlight(mat, true);
 }
 
-/* キャンバスクリック → Raycast */
-const ray = new THREE.Raycaster(), pt = new THREE.Vector2();
-canvas.addEventListener('pointerdown',(e)=>{
-  try{
-    hidePicker();
-    const rect=canvas.getBoundingClientRect();
-    pt.x=((e.clientX-rect.left)/rect.width)*2-1;
-    pt.y=-((e.clientY-rect.top)/rect.height)*2+1;
-    ray.setFromCamera(pt,camera);
-    const root = model || scene;
-    const hits = ray.intersectObject(root,true);
-    if(!hits.length) return;
-    const obj = hits[0].object;
-    if(!obj || !obj.isMesh) return;
+/* ====== キャンバスクリック → Raycast ====== */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 
-    let mat = obj.material;
-    if(Array.isArray(mat)){
-      const idx = (hits[0].face && typeof hits[0].face.materialIndex==='number') ? hits[0].face.materialIndex : 0;
-      mat = mat[idx];
-    }
-    if(!isSupportedMat(mat)) return;
+function handleCanvasClick(e){
+  hidePicker();
+  const rect = renderer.domElement.getBoundingClientRect(); // ← domElement基準
+  ndc.x = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  ndc.y = (-(e.clientY - rect.top) / rect.height) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
 
-    const title = (mat.name||'(unnamed)').replace(/_/g,' ');
-    showPickerForMat(mat, e.clientX, e.clientY, title);
-  }catch(err){ reportError(err); }
-});
-window.addEventListener('pointerdown',(e)=>{
-  if(!picker.contains(e.target)) hidePicker();
-});
+  const targets = raycastTargets.filter(o => o.visible && !o.userData?.isOverlay);
+  const hits = ray.intersectObjects(targets, true);
+  const hit = hits.find(h => h.object && h.object.material);
 
-/* 吹き出し内の選択 */
+  if(!hit){ pickMesh=null; pickMatIndex=null; hideHighlight(); return; }
+
+  pickMesh = hit.object;
+  pickMatIndex = Array.isArray(pickMesh.material) ? (hit.face?.materialIndex ?? 0) : null;
+
+  showHighlight(pickMesh);
+
+  const mat = Array.isArray(pickMesh.material) ? pickMesh.material[pickMatIndex] : pickMesh.material;
+  if(!isSupportedMat(mat)) return;
+
+  const title = (mat.name||'(unnamed)').replace(/_/g,' ');
+  showPickerAt(e.clientX, e.clientY, title, mat);
+}
+canvas.addEventListener('pointerdown', handleCanvasClick);
+window.addEventListener('pointerdown',(e)=>{ if(!picker.contains(e.target)) hidePicker(); });
+
+/* ====== 吹き出し内の選択 → クリックしたサブマテリアルだけに割当 ====== */
 picker.querySelectorAll('button[data-slot]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    if(!pickerMat) return;
-    assign[pickerMat.uuid] = btn.dataset.slot; // 'A'|'B'|'C'|'—'
+    if(!pickMesh || !pickMesh.material) return;
+    if(Array.isArray(pickMesh.material)){
+      const idx = Number.isInteger(pickMatIndex) ? pickMatIndex : 0;
+      const m = pickMesh.material[idx];
+      if(m) assign[m.uuid] = btn.dataset.slot;
+    }else{
+      assign[pickMesh.material.uuid] = btn.dataset.slot;
+    }
     applyAssignments();
     hidePicker();
   });
 });
 
-/* UI: カメラ / ファイル読込 */
+/* ====== UI: カメラ / ファイル読込 ====== */
 $('resetCam').addEventListener('click', ()=>{
   hidePicker();
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
+
 function loadTexTo(key, file){
-  state[key].tex = texLoader.load(URL.createObjectURL(file), ()=>{
-    prepTexture(state[key].tex); applyParamsToTexture(key); applyAssignments(); msg(`生地${key}を読み込みました`);
+  const s = state[key];
+
+  // 既存の解放
+  if(s.tex){
+    targetMats.forEach(m=>{ if(m.map===s.tex){ m.map=null; m.needsUpdate=true; } });
+    s.tex.dispose();
+    s.tex = null;
+  }
+  if(s.url){ try{ URL.revokeObjectURL(s.url); }catch{} s.url=null; }
+
+  s.url = URL.createObjectURL(file);
+  s.tex = texLoader.load(s.url, ()=>{
+    prepTexture(s.tex);
+    applyParamsToTexture(key);
+    applyAssignments();
     updatePickerThumbs();
+    msg(`生地${key}を読み込みました`);
   });
 }
-$('texA').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadTexTo('A',f); });
-$('texB').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadTexTo('B',f); });
-$('texC').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) loadTexTo('C',f); });
+$('texA').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexTo('A',f); });
+$('texB').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexTo('B',f); });
+$('texC').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexTo('C',f); });
 
 /* クリアA/B/C（画像のみ外す） */
 function clearTexture(key){
   const s = state[key];
-  s.tex = null; if(s.fileEl) s.fileEl.value = '';
+  targetMats.forEach(m=>{ if(m.map===s.tex){ m.map=null; m.needsUpdate=true; } });
+  if(s.tex){ s.tex.dispose(); s.tex=null; }
+  if(s.url){ try{ URL.revokeObjectURL(s.url); }catch{} s.url=null; }
+  if(s.fileEl) s.fileEl.value='';
   updatePickerThumbs();
   applyAssignments();
   msg(`生地${key}をクリアしました`);
@@ -389,6 +434,15 @@ let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; cl
 function reportError(err){ console.error(err); msg(`⚠ エラー: ${err && err.message ? err.message : err}`); }
 window.addEventListener('error', (ev)=>reportError(ev.error||ev.message));
 window.addEventListener('unhandledrejection', (ev)=>reportError(ev.reason||ev));
+
+/* ページ離脱時にURL/テクスチャ解放（任意） */
+window.addEventListener('beforeunload', ()=>{
+  ['A','B','C'].forEach(k=>{
+    const s = state[k];
+    if(s.tex){ s.tex.dispose(); s.tex=null; }
+    if(s.url){ try{ URL.revokeObjectURL(s.url); }catch{} s.url=null; }
+  });
+});
 </script>
 </body>
 </html>
