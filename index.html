@@ -173,7 +173,7 @@ function isSupportedMat(m){
 }
 function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
 
-/* マテリアル抽出 */
+/* マテリアル抽出（初期は真っ白に） */
 function analyze(root){
   const mats=new Set();
   root.traverse(o=>{
@@ -182,7 +182,7 @@ function analyze(root){
     }
   });
   targetMats = Array.from(mats).filter(isSupportedMat);
-  targetMats.forEach(m=>{ if(m && m.color) m.color.set(0xffffff); });
+  targetMats.forEach(m=>{ if(m){ m.map=null; if(m.color) m.color.set(0xffffff); m.needsUpdate=true; } });
   updateMatInfo();
 }
 
@@ -209,7 +209,7 @@ function prepTexture(t){
   if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.center.set(0.5,0.5);
-  t.flipY = false;                   // glTF系ジオメトリでも上下が合うように
+  t.flipY = false; // glTF系でも狂いにくくする
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
   t.needsUpdate = true;
 }
@@ -219,21 +219,19 @@ function applyParamsToTexture(key){
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
   t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
   t.needsUpdate = true;
-  // すでにこのテクスチャが貼られているマテリアルも再描画
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid];
     const tex = key && state[key] ? state[key].tex : null;
-
     if(isSupportedMat(m)){
       if(!tex || key==='—'){
         m.map = null;
         if(m.color) m.color.set(0xffffff);
       }else{
         m.map = tex;
-        if(m.color) m.color.set(0xffffff); // 乗算成分をリセット
+        if(m.color) m.color.set(0xffffff); // 乗算成分リセット
       }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
@@ -254,7 +252,9 @@ function showHighlight(mesh){
   const mat = new THREE.MeshBasicMaterial({
     color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false
   });
-  overlay = new THREE.Mesh(mesh.geometry, mat);
+  // SkinnedMeshでも形が追従するように種類を合わせる
+  overlay = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
+  if(mesh.isSkinnedMesh && mesh.skeleton){ overlay.bind(mesh.skeleton); }
   overlay.renderOrder = 9999;
   overlay.userData.isOverlay = true;
   overlay.raycast = ()=>{}; // 自分には当たらない
@@ -268,7 +268,6 @@ function hideHighlight(){
 /* ====== 吹き出し ====== */
 const picker = $('picker'), pickerTitle = $('pickerTitle');
 picker.addEventListener('pointerdown', e=>e.stopPropagation()); // 中のクリックで外閉じしない
-
 function hidePicker(){ picker.style.display='none'; }
 function updatePickerThumbs(){
   ['A','B','C'].forEach(k=>{
@@ -291,6 +290,26 @@ function showPickerAt(x,y,title,mat){
   });
 }
 
+/* ====== BufferGeometryでのmaterialIndex逆引き ====== */
+function getMaterialIndexFromHit(hit){
+  const obj = hit.object;
+  if(!Array.isArray(obj.material)) return null;
+  const geom = obj.geometry;
+  const faceIndex = hit.faceIndex; // 三角形インデックス（面番号）
+  if(geom && Number.isInteger(faceIndex)){
+    const groups = geom.groups || [];
+    const firstIndex = faceIndex * 3; // groups.start/count は index配列のオフセット
+    for(let i=0;i<groups.length;i++){
+      const g = groups[i];
+      const s = g.start || 0, c = g.count || 0;
+      if(firstIndex >= s && firstIndex < s + c){
+        return (g.materialIndex!=null) ? g.materialIndex : i;
+      }
+    }
+  }
+  return 0; // フォールバック
+}
+
 /* ====== キャンバスクリック → Raycast ====== */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 
@@ -307,11 +326,11 @@ function handleCanvasClick(e){
   if(!hit){ pickMesh=null; pickMatIndex=null; hideHighlight(); return; }
 
   pickMesh = hit.object;
-  pickMatIndex = Array.isArray(pickMesh.material) ? (hit.face?.materialIndex ?? 0) : null;
+  pickMatIndex = getMaterialIndexFromHit(hit);
 
   showHighlight(pickMesh);
 
-  const mat = Array.isArray(pickMesh.material) ? pickMesh.material[pickMatIndex] : pickMesh.material;
+  const mat = Array.isArray(pickMesh.material) ? pickMesh.material[pickMatIndex ?? 0] : pickMesh.material;
   if(!isSupportedMat(mat)) return;
 
   const title = (mat.name||'(unnamed)').replace(/_/g,' ');
@@ -325,21 +344,19 @@ picker.querySelectorAll('button[data-slot]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(!pickMesh || !pickMesh.material) return;
 
-    // デバッグ：テクスチャ有無を表示
-    const slot = btn.dataset.slot;
-    if(slot!=='—'){
-      const hasTex = !!(state[slot] && state[slot].tex);
-      if(!hasTex){ msg(`生地${slot}が未読込です。先に左パネルから画像を選択してください。`); return; }
+    const slot = btn.dataset.slot; // 'A'|'B'|'C'|'—'
+    // 未読込スロットは警告して中断
+    if(slot!=='—' && !(state[slot] && state[slot].tex)){
+      msg(`生地${slot}が未読込です。先に左パネルから画像を選択してください。`);
+      return;
     }
 
     if(Array.isArray(pickMesh.material)){
       const idx = Number.isInteger(pickMatIndex) ? pickMatIndex : 0;
       const m = pickMesh.material[idx];
       if(m) assign[m.uuid] = slot;
-      msg(`割り当て: ${slot} @ materialIndex ${idx}`);
     }else{
       assign[pickMesh.material.uuid] = slot;
-      msg(`割り当て: ${slot}`);
     }
     applyAssignments();
     hidePicker();
