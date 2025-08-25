@@ -8,10 +8,10 @@
 
   /* ==== 左パネル（開閉スライド） ==== */
   #uiWrap{position:fixed;z-index:5;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
-  #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:380px}
+  #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:420px}
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
-  .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
   .mini{margin-left:6px;font-size:12px;padding:2px 6px}
 
   #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;
@@ -30,7 +30,7 @@
     background:#111e; color:#fff; backdrop-filter: blur(4px);
     border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;
   }
-  #bubble .row{display:flex; gap:6px; align-items:center}
+  #bubble .row{display:flex; gap:6px; align-items:center; flex-wrap:wrap; max-width:320px}
   .chip{
     width:56px;height:56px;border-radius:8px;border:1px solid #fff5;background:#222 center/cover no-repeat;cursor:pointer;
     display:flex;align-items:center;justify-content:center;font-weight:700;letter-spacing:.5px;
@@ -48,9 +48,11 @@
     <div class="btnRow">
       <button id="resetCam">カメラリセット</button>
       <button id="resetAll" title="倍率/回転を初期化・割り当てを全て『なし』・見た目を白に戻す">リセット</button>
+      <button id="shot" title="今の画面をPNG保存">スクショPNG</button>
       <small id="matinfo" style="margin-left:auto;"></small>
     </div>
 
+    <!-- A -->
     <div class="block">
       <h4>生地A</h4>
       <div class="btnRow">
@@ -61,6 +63,7 @@
       <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
     </div>
 
+    <!-- B -->
     <div class="block">
       <h4>生地B</h4>
       <div class="btnRow">
@@ -71,6 +74,7 @@
       <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
     </div>
 
+    <!-- C -->
     <div class="block">
       <h4>生地C</h4>
       <div class="btnRow">
@@ -81,19 +85,43 @@
       <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
     </div>
 
+    <!-- D -->
+    <div class="block">
+      <h4>生地D</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texD" type="file" accept="image/*"></label>
+        <button id="clearD" class="mini" type="button">クリアD</button>
+      </div>
+      <label>タイル倍率D <input id="repeatD" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvD">3</span></label>
+      <label>回転D（度） <input id="rotD" type="range" min="0" max="180" step="1" value="0"> <span id="rotvD">0</span></label>
+    </div>
+
+    <!-- E -->
+    <div class="block">
+      <h4>生地E</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texE" type="file" accept="image/*"></label>
+        <button id="clearE" class="mini" type="button">クリアE</button>
+      </div>
+      <label>タイル倍率E <input id="repeatE" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvE">3</span></label>
+      <label>回転E（度） <input id="rotE" type="range" min="0" max="180" step="1" value="0"> <span id="rotvE">0</span></label>
+    </div>
+
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>
   </div>
 
   <button id="uiToggle" aria-label="toggle panel">‹</button>
 </div>
 
-<!-- クリック位置に出る吹き出し -->
+<!-- クリック位置に出る吹き出し（A〜E + なし） -->
 <div id="bubble">
   <div style="font-size:12px;margin-bottom:4px">生地を割り当て</div>
   <div class="row">
     <button class="chip" id="pickA">A</button>
     <button class="chip" id="pickB">B</button>
     <button class="chip" id="pickC">C</button>
+    <button class="chip" id="pickD">D</button>
+    <button class="chip" id="pickE">E</button>
     <button class="chip none" id="pickNone">なし</button>
   </div>
 </div>
@@ -110,6 +138,7 @@
 /* ========= 基本 ========= */
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
+const SLOTS = ['A','B','C','D','E']; // ★ スロット拡張
 
 /* three.js */
 const canvas = $('c');
@@ -127,17 +156,23 @@ let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
   model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
+  // 自動UVスケール推定（初回のみ）
+  applyAutoUVScaleIfFirst(model);
+  // 保存してあれば割り当て復元
+  loadAssignFromStorage(); applyAssignments();
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
   const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo();
+  applyAutoUVScaleIfFirst(cube);
+  loadAssignFromStorage(); applyAssignments();
   msg('assets/garment.glb が無いのでキューブ表示');
 });
 
 /* ===== ユーティリティ ===== */
 function isSupportedMat(m){
-  return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
+  return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshBasicMaterial);
 }
 
 /* マテリアル抽出（使用数カウントつき） */
@@ -173,22 +208,81 @@ function fit(obj){
   camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* A/B/C の状態 */
+/* ===== A〜E の状態 & 永続化 ===== */
 const texLoader = new THREE.TextureLoader();
 const state = {
   A:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA') },
   B:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatB'), rotEl:$('rotB'), repv:$('repvB'), rotv:$('rotvB'), fileEl:$('texB') },
   C:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatC'), rotEl:$('rotC'), repv:$('repvC'), rotv:$('rotvC'), fileEl:$('texC') },
+  D:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatD'), rotEl:$('rotD'), repv:$('repvD'), rotv:$('rotvD'), fileEl:$('texD') },
+  E:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatE'), rotEl:$('rotE'), repv:$('repvE'), rotv:$('rotvE'), fileEl:$('texE') },
 };
-const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
+const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
 
+const LS_KEYS = {
+  sliders: 'fv_sliders_v1',   // {A:{repeat,rotDeg}, ...}
+  assign : 'fv_assign_v1',    // {materialUUID:'A'|'B'|'C'|'D'|'E'|'—'}
+  ui     : 'uiCollapsed'
+};
+
+function saveSlidersToStorage(){
+  const data = {};
+  SLOTS.forEach(k=>{ data[k] = {repeat: state[k].repeat, rotDeg: state[k].rotDeg}; });
+  try{ localStorage.setItem(LS_KEYS.sliders, JSON.stringify(data)); }catch(e){}
+}
+function loadSlidersFromStorage(){
+  try{
+    const raw = localStorage.getItem(LS_KEYS.sliders);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    let applied = false;
+    SLOTS.forEach(k=>{
+      if(data[k]){
+        const rep = Number(data[k].repeat); const rot = Number(data[k].rotDeg);
+        if(Number.isFinite(rep)){ state[k].repeat = rep; state[k].repEl.value = rep; state[k].repv.textContent = rep; applied = true; }
+        if(Number.isFinite(rot)){ state[k].rotDeg = rot; state[k].rotEl.value = rot; state[k].rotv.textContent = rot; applied = true; }
+      }
+    });
+    return applied;
+  }catch(e){ return false; }
+}
+function saveAssignToStorage(){
+  try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){}
+}
+function loadAssignFromStorage(){
+  try{
+    const raw = localStorage.getItem(LS_KEYS.assign);
+    if(!raw) return;
+    const obj = JSON.parse(raw);
+    Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
+  }catch(e){}
+}
+
+/* 自動UVスケール推定（初回のみ＝スライダー保存がまだ無い時） */
+function applyAutoUVScaleIfFirst(rootObj){
+  const had = localStorage.getItem(LS_KEYS.sliders);
+  if(had) return; // 既にユーザ設定あり
+  const box = new THREE.Box3().setFromObject(rootObj);
+  const size = box.getSize(new THREE.Vector3());
+  // ヒューリスティック：衣服の平均的な横×縦スケールから「1mあたりの目視タイル数 ≒ 2」を想定
+  const L = Math.sqrt(size.x * size.y);               // 代表長さ（横×縦の幾何平均）
+  let r = L * 2.0;                                    // 1mあたり2タイル換算
+  r = Math.max(1, Math.min(12, Math.round(r*2)/2));   // 0.5刻みで 1〜12 にクランプ
+  SLOTS.forEach(k=>{
+    state[k].repeat = r;
+    state[k].repEl.value = r;
+    state[k].repv.textContent = r;
+  });
+  saveSlidersToStorage();
+}
+
+/* テクスチャ前処理＆適用 */
 function prepTexture(t){
   if(!t) return;
   if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
-
 function applyParamsToTexture(key){
   const s = state[key]; const t = s.tex; if(!t) return;
   s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
@@ -197,7 +291,6 @@ function applyParamsToTexture(key){
   t.center.set(0.5,0.5); t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
-
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
@@ -209,14 +302,24 @@ function applyAssignments(){
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
-  ['A','B','C'].forEach(applyParamsToTexture);
+  SLOTS.forEach(applyParamsToTexture);
+  saveAssignToStorage(); // ← 割当変更の度に保存
 }
 
-/* UI: カメラ / 画像読込 */
+/* UI: カメラ / 画像読込 / スクショ */
 $('resetCam').addEventListener('click', ()=>{
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
+$('shot').addEventListener('click', ()=>{
+  // 一旦レンダリングを最新にしてから保存
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.download = `fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
 function loadTexFor(key, file){
   state[key].url = URL.createObjectURL(file);
   state[key].tex = texLoader.load(state[key].url, ()=>{
@@ -224,11 +327,11 @@ function loadTexFor(key, file){
     updateBubblePreviews(); msg(`生地${key}を読み込みました`);
   });
 }
-$('texA').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor('A',f); });
-$('texB').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor('B',f); });
-$('texC').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor('C',f); });
+SLOTS.forEach(k=>{
+  $('tex'+k).addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor(k,f); });
+});
 
-/* クリアA/B/C（画像のみ外す） */
+/* クリア（画像のみ外す） */
 function clearTexture(key){
   const s = state[key];
   s.tex = null; s.url=''; s.fileEl.value = '';
@@ -236,17 +339,26 @@ function clearTexture(key){
   applyAssignments();
   msg(`生地${key}をクリアしました`);
 }
-$('clearA').addEventListener('click', ()=>clearTexture('A'));
-$('clearB').addEventListener('click', ()=>clearTexture('B'));
-$('clearC').addEventListener('click', ()=>clearTexture('C'));
+SLOTS.forEach(k=>{
+  $('clear'+k).addEventListener('click', ()=>clearTexture(k));
+});
 
-/* スライダー：値→状態→テクスチャに反映 */
-state.A.repEl.addEventListener('input', ()=>{ state.A.repeat = Number(state.A.repEl.value); applyParamsToTexture('A'); });
-state.A.rotEl.addEventListener('input', ()=>{ state.A.rotDeg = Number(state.A.rotEl.value); applyParamsToTexture('A'); });
-state.B.repEl.addEventListener('input', ()=>{ state.B.repeat = Number(state.B.repEl.value); applyParamsToTexture('B'); });
-state.B.rotEl.addEventListener('input', ()=>{ state.B.rotDeg = Number(state.B.rotEl.value); applyParamsToTexture('B'); });
-state.C.repEl.addEventListener('input', ()=>{ state.C.repeat = Number(state.C.repEl.value); applyParamsToTexture('C'); });
-state.C.rotEl.addEventListener('input', ()=>{ state.C.rotDeg = Number(state.C.rotEl.value); applyParamsToTexture('C'); });
+/* スライダー：値→状態→テクスチャに反映（保存つき） */
+SLOTS.forEach(k=>{
+  state[k].repEl.addEventListener('input', ()=>{
+    state[k].repeat = Number(state[k].repEl.value);
+    applyParamsToTexture(k);
+    saveSlidersToStorage();
+  });
+  state[k].rotEl.addEventListener('input', ()=>{
+    state[k].rotDeg = Number(state[k].rotEl.value);
+    applyParamsToTexture(k);
+    saveSlidersToStorage();
+  });
+});
+
+/* 初期：スライダー保存があれば復元（テクスチャはユーザ再選択が必要） */
+loadSlidersFromStorage();
 
 /* ===== クリックでパーツ選択 → 吹き出し ===== */
 const ray = new THREE.Raycaster();
@@ -255,15 +367,17 @@ let pick = null;               // 現在選択中の Mesh
 let overlay = null;            // 赤ハイライト用
 let pickMatIndex = null;       // クリック面の materialIndex
 const bubble = $('bubble');
-const pickA = $('pickA'), pickB = $('pickB'), pickC = $('pickC'), pickNone = $('pickNone');
+const chipEls = {
+  A:$('pickA'), B:$('pickB'), C:$('pickC'), D:$('pickD'), E:$('pickE'), None:$('pickNone')
+};
 
 function updateBubblePreviews(){
-  pickA.style.backgroundImage = state.A.url ? `url(${state.A.url})` : 'none';
-  pickB.style.backgroundImage = state.B.url ? `url(${state.B.url})` : 'none';
-  pickC.style.backgroundImage = state.C.url ? `url(${state.C.url})` : 'none';
-  pickA.textContent = state.A.url ? '' : 'A';
-  pickB.textContent = state.B.url ? '' : 'B';
-  pickC.textContent = state.C.url ? '' : 'C';
+  SLOTS.forEach(k=>{
+    const el = chipEls[k];
+    if(!el) return;
+    el.style.backgroundImage = state[k].url ? `url(${state[k].url})` : 'none';
+    el.textContent = state[k].url ? '' : k;
+  });
 }
 updateBubblePreviews();
 
@@ -292,7 +406,6 @@ function setBubbleScreenPos(world){
 }
 
 function onCanvasClick(ev){
-  // UI上のクリックは無視
   const r = canvas.getBoundingClientRect();
   mouse.x = ((ev.clientX - r.left)/r.width) * 2 - 1;
   mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
@@ -307,10 +420,9 @@ function onCanvasClick(ev){
 
   pick = hit.object;
   pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number')
-    ? hit.face.materialIndex : null;  // ← クリック面の materialIndex を記録
+    ? hit.face.materialIndex : null;
   showHighlight(pick);
 
-  // 吹き出し表示位置（少し上にずらす）
   const wp = hit.point.clone().add(new THREE.Vector3(0, 0.02, 0));
   setBubbleScreenPos(wp);
   bubble.style.display='block';
@@ -356,38 +468,38 @@ function assignToSelected(key){
 
   let mat = null;
   if(Array.isArray(pick.material)){
-    const idx = (pickMatIndex!=null) ? pickMatIndex : 0;   // faceから特定。無ければ0番にフォールバック
+    const idx = (pickMatIndex!=null) ? pickMatIndex : 0;
     mat = ensureUniqueMaterialOnMesh(pick, idx);
   }else{
     mat = ensureUniqueMaterialOnMesh(pick, 0);
   }
   if(!mat) return;
 
-  assign[mat.uuid] = key;   // ← このマテリアルだけ記録
+  assign[mat.uuid] = key;   // ← このマテリアルだけ記録（'—'で解除）
   applyAssignments();
-  // 操作後も選択中パーツだけ赤（ハイライトは維持）
 }
-pickA.onclick   = ()=>assignToSelected('A');
-pickB.onclick   = ()=>assignToSelected('B');
-pickC.onclick   = ()=>assignToSelected('C');
-pickNone.onclick= ()=>assignToSelected('—');
+chipEls.A.onclick   = ()=>assignToSelected('A');
+chipEls.B.onclick   = ()=>assignToSelected('B');
+chipEls.C.onclick   = ()=>assignToSelected('C');
+chipEls.D.onclick   = ()=>assignToSelected('D');
+chipEls.E.onclick   = ()=>assignToSelected('E');
+chipEls.None.onclick= ()=>assignToSelected('—');
 
 /* パネル開閉（保存つき） */
 const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
 function setCollapsed(v){
   uiWrap.classList.toggle('collapsed', v);
   uiToggle.textContent = v ? '›' : '‹';
-  localStorage.setItem('uiCollapsed', v ? '1' : '0');
+  localStorage.setItem(LS_KEYS.ui, v ? '1' : '0');
 }
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
-setCollapsed(localStorage.getItem('uiCollapsed')==='1');
+setCollapsed(localStorage.getItem(LS_KEYS.ui)==='1');
 
 /* ループ */
 function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight;
   if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
 function loop(){
   resize(); controls.update(); renderer.render(scene,camera);
-  // 吹き出し追従（選択中だけ）
   if(pick && bubble.style.display!=='none'){
     const center = new THREE.Box3().setFromObject(pick).getCenter(new THREE.Vector3());
     setBubbleScreenPos(center);
