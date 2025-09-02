@@ -22,7 +22,7 @@
   .block h4{margin:0 0 4px 0;font-size:13px}
 
   #footer{position:fixed;right:10px;bottom:10px;z-index:4;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
-  #msg{position:fixed;z-index:6;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
+  #msg{position:fixed;z-index:8;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
 
   /* ==== クリック時の吹き出し ==== */
   #bubble{
@@ -37,6 +37,17 @@
   }
   .chip.none{background:#222}
   .chip:hover{outline:2px solid #fff9}
+
+  /* ==== 右上：履歴サムネ ==== */
+  #shots{
+    position:fixed; top:10px; right:10px; z-index:9; display:flex; gap:8px; pointer-events:auto;
+  }
+  #shots.hidden{display:none}
+  #shots img{
+    width:116px; height:auto; border-radius:8px; border:1px solid #ffffff33; background:#111;
+    box-shadow:0 2px 10px #000a; cursor:pointer; opacity:.95; transition:transform .08s;
+  }
+  #shots img:hover{ transform:translateY(-2px); opacity:1; }
 </style>
 </head><body>
 
@@ -126,6 +137,9 @@
   </div>
 </div>
 
+<!-- 右上の履歴サムネ -->
+<div id="shots" class="hidden"></div>
+
 <div id="footer">ドラッグで回転 / ホイールでズーム / 右ドラッグで移動</div>
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
@@ -138,7 +152,7 @@
 /* ========= 基本 ========= */
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
-const SLOTS = ['A','B','C','D','E']; // ★ スロット拡張
+const SLOTS = ['A','B','C','D','E']; // スロット拡張
 
 /* three.js */
 const canvas = $('c');
@@ -156,9 +170,8 @@ let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
 loader.load(GLB_PATH, (glb)=>{
   model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
-  // 自動UVスケール推定（初回のみ）
   applyAutoUVScaleIfFirst(model);
-  // 保存してあれば割り当て復元
+  initAssignDefaults(); // 全マテリアルを '—' 初期化
   loadAssignFromStorage(); applyAssignments();
 }, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
@@ -166,6 +179,7 @@ loader.load(GLB_PATH, (glb)=>{
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo();
   applyAutoUVScaleIfFirst(cube);
+  initAssignDefaults();
   loadAssignFromStorage(); applyAssignments();
   msg('assets/garment.glb が無いのでキューブ表示');
 });
@@ -220,8 +234,8 @@ const state = {
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
 
 const LS_KEYS = {
-  sliders: 'fv_sliders_v1',   // {A:{repeat,rotDeg}, ...}
-  assign : 'fv_assign_v1',    // {materialUUID:'A'|'B'|'C'|'D'|'E'|'—'}
+  sliders: 'fv_sliders_v1',
+  assign : 'fv_assign_v2',   // ★ v2: 名前ベースで保存
   ui     : 'uiCollapsed'
 };
 
@@ -246,32 +260,48 @@ function loadSlidersFromStorage(){
     return applied;
   }catch(e){ return false; }
 }
+function getAssignByName(){
+  const m = {};
+  targetMats.forEach(mt=>{
+    const nm = (mt.name||'').trim();
+    if(!nm) return;
+    if(assign[mt.uuid]) m[nm] = assign[mt.uuid];
+  });
+  return m;
+}
 function saveAssignToStorage(){
-  try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){}
+  const payload = { byName: getAssignByName(), ts: Date.now() };
+  try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(payload)); }catch(e){}
 }
 function loadAssignFromStorage(){
   try{
     const raw = localStorage.getItem(LS_KEYS.assign);
     if(!raw) return;
-    const obj = JSON.parse(raw);
-    Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
+    const data = JSON.parse(raw);
+    const byName = data.byName || {};
+    // いったん空に
+    Object.keys(assign).forEach(k=>delete assign[k]);
+    // 名前ベースで復元
+    targetMats.forEach(mt=>{
+      const nm = (mt.name||'').trim();
+      if(nm && byName[nm]) assign[mt.uuid] = byName[nm];
+    });
   }catch(e){}
+}
+function initAssignDefaults(){
+  targetMats.forEach(m=>{ if(!(m.uuid in assign)) assign[m.uuid]='—'; });
 }
 
 /* 自動UVスケール推定（初回のみ＝スライダー保存がまだ無い時） */
 function applyAutoUVScaleIfFirst(rootObj){
   const had = localStorage.getItem(LS_KEYS.sliders);
-  if(had) return; // 既にユーザ設定あり
+  if(had) return;
   const box = new THREE.Box3().setFromObject(rootObj);
   const size = box.getSize(new THREE.Vector3());
-  // ヒューリスティック：衣服の平均的な横×縦スケールから「1mあたりの目視タイル数 ≒ 2」を想定
-  const L = Math.sqrt(size.x * size.y);               // 代表長さ（横×縦の幾何平均）
-  let r = L * 2.0;                                    // 1mあたり2タイル換算
-  r = Math.max(1, Math.min(12, Math.round(r*2)/2));   // 0.5刻みで 1〜12 にクランプ
+  const L = Math.sqrt(size.x * size.y);
+  let r = Math.max(1, Math.min(12, Math.round((L*2.0)*2)/2));
   SLOTS.forEach(k=>{
-    state[k].repeat = r;
-    state[k].repEl.value = r;
-    state[k].repv.textContent = r;
+    state[k].repeat = r; state[k].repEl.value = r; state[k].repv.textContent = r;
   });
   saveSlidersToStorage();
 }
@@ -291,6 +321,80 @@ function applyParamsToTexture(key){
   t.center.set(0.5,0.5); t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
+
+/* ===== 履歴サムネ（最大6） ===== */
+const shotsBox = $('shots');
+let shots = [];        // [{sig,dataURL,assignByName,sliders}]
+let lastSig = null;
+function sliderSnapshot(){
+  const s={}; SLOTS.forEach(k=> s[k]={repeat:state[k].repeat,rot:state[k].rotDeg}); return s;
+}
+function assignSignatureOnlyNames(){
+  // “パターン”の比較は割当（名前→A/B/C/D/E）のみ。スライダーは含めない。
+  const map = getAssignByName();
+  const keys = Object.keys(map).sort();
+  return JSON.stringify(keys.map(k=>[k,map[k]]));
+}
+function allPartsCovered(){
+  if(!targetMats.length) return false;
+  // 全マテリアルが '—' でなく、かつ該当スロットに画像がある
+  return targetMats.every(m=>{
+    const key = assign[m.uuid];
+    return SLOTS.includes(key) && state[key] && state[key].tex;
+  });
+}
+let shotTimer=null;
+function maybeAutoCapture(){
+  if(!allPartsCovered()) return;                      // “全部埋めた” 条件
+  const sig = assignSignatureOnlyNames();
+  if(!sig || sig===lastSig) return;                   // 同一パターンは撮らない
+  lastSig = sig;
+  clearTimeout(shotTimer);
+  shotTimer = setTimeout(()=>{
+    renderer.render(scene, camera);
+    const url = renderer.domElement.toDataURL('image/png');
+    const entry = {sig:url.length+sig, dataURL:url, assignByName:getAssignByName(), sliders:sliderSnapshot()};
+    // 最新を右端に置きたい → 配列末尾にpush、DOMはflexの右寄せを利用
+    shots.push(entry);
+    if(shots.length>6) shots.shift();
+    renderShots();
+  }, 120);
+}
+function renderShots(){
+  shotsBox.innerHTML='';
+  if(!shots.length){ shotsBox.classList.add('hidden'); return; }
+  shotsBox.classList.remove('hidden');
+  // 右端から古→新の並びになるように render（最新が右）
+  shots.forEach((e,idx)=>{
+    const img = new Image();
+    img.src = e.dataURL;
+    img.title = `パターン ${idx+1}`;
+    img.onclick = ()=>applyShot(e);
+    shotsBox.appendChild(img);
+  });
+}
+function applyShot(entry){
+  // スライダー復元
+  const s = entry.sliders||{};
+  SLOTS.forEach(k=>{
+    if(s[k]){
+      state[k].repeat = s[k].repeat; state[k].rotDeg = s[k].rot;
+      state[k].repEl.value = s[k].repeat; state[k].rotEl.value = s[k].rot;
+      state[k].repv.textContent = s[k].repeat; state[k].rotv.textContent = s[k].rot;
+      applyParamsToTexture(k);
+    }
+  });
+  // 割当復元（名前ベース）
+  Object.keys(assign).forEach(k=>delete assign[k]);
+  targetMats.forEach(m=>{
+    const nm=(m.name||'').trim();
+    if(nm && entry.assignByName[nm]) assign[m.uuid]=entry.assignByName[nm];
+    else assign[m.uuid]='—';
+  });
+  applyAssignments(); msg('履歴パターンを適用しました');
+}
+
+/* 割当適用（＆保存＆自動スクショ判定） */
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
@@ -303,16 +407,16 @@ function applyAssignments(){
     }
   });
   SLOTS.forEach(applyParamsToTexture);
-  saveAssignToStorage(); // ← 割当変更の度に保存
+  saveAssignToStorage();
+  maybeAutoCapture();                 // ← ここで自動スクショ
 }
 
-/* UI: カメラ / 画像読込 / スクショ */
+/* UI: カメラ / 画像読込 / スクショ手動保存 */
 $('resetCam').addEventListener('click', ()=>{
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
 $('shot').addEventListener('click', ()=>{
-  // 一旦レンダリングを最新にしてから保存
   renderer.render(scene, camera);
   const a = document.createElement('a');
   a.download = `fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
@@ -336,24 +440,20 @@ function clearTexture(key){
   const s = state[key];
   s.tex = null; s.url=''; s.fileEl.value = '';
   updateBubblePreviews();
-  applyAssignments();
+  applyAssignments();               // “なし”が混じるので自動スクショ条件を満たさず、撮らない
   msg(`生地${key}をクリアしました`);
 }
-SLOTS.forEach(k=>{
-  $('clear'+k).addEventListener('click', ()=>clearTexture(k));
-});
+SLOTS.forEach(k=> $('clear'+k).addEventListener('click', ()=>clearTexture(k)));
 
 /* スライダー：値→状態→テクスチャに反映（保存つき） */
 SLOTS.forEach(k=>{
   state[k].repEl.addEventListener('input', ()=>{
     state[k].repeat = Number(state[k].repEl.value);
-    applyParamsToTexture(k);
-    saveSlidersToStorage();
+    applyParamsToTexture(k); saveSlidersToStorage();
   });
   state[k].rotEl.addEventListener('input', ()=>{
     state[k].rotDeg = Number(state[k].rotEl.value);
-    applyParamsToTexture(k);
-    saveSlidersToStorage();
+    applyParamsToTexture(k); saveSlidersToStorage();
   });
 });
 
@@ -389,7 +489,7 @@ function showHighlight(mesh){
   });
   overlay = new THREE.Mesh(mesh.geometry, mat);
   overlay.renderOrder = 9999;
-  mesh.add(overlay); // ローカル子に付けるとトランスフォーム追従
+  mesh.add(overlay);
 }
 function hideHighlight(){
   if(overlay && overlay.parent){ overlay.parent.remove(overlay); }
@@ -411,8 +511,7 @@ function onCanvasClick(ev){
   mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
   ray.setFromCamera(mouse, camera);
 
-  const targets = [];
-  scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
+  const targets = []; scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
   const hits = ray.intersectObjects(targets, true);
   const hit = hits.find(h => h.object && (h.object.material));
 
@@ -431,7 +530,7 @@ function onCanvasClick(ev){
 }
 canvas.addEventListener('pointerdown', onCanvasClick);
 
-/* 同じMaterialを他メッシュと共有していたら、その場でクローンして専有化 */
+/* 同じMaterialを共有していたら、その場でクローンして専有化 */
 function ensureUniqueMaterialOnMesh(mesh, idx){
   if(Array.isArray(mesh.material)){
     const old = mesh.material[idx];
@@ -465,7 +564,6 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
 /* 吹き出しボタン → 割り当て（クリック面のサブマテリアル “だけ”） */
 function assignToSelected(key){
   if(!pick || !pick.material) return;
-
   let mat = null;
   if(Array.isArray(pick.material)){
     const idx = (pickMatIndex!=null) ? pickMatIndex : 0;
@@ -475,8 +573,8 @@ function assignToSelected(key){
   }
   if(!mat) return;
 
-  assign[mat.uuid] = key;   // ← このマテリアルだけ記録（'—'で解除）
-  applyAssignments();
+  assign[mat.uuid] = key;   // '—'で解除
+  applyAssignments();       // ここで自動スクショ判定も走る
 }
 chipEls.A.onclick   = ()=>assignToSelected('A');
 chipEls.B.onclick   = ()=>assignToSelected('B');
@@ -509,5 +607,8 @@ function loop(){
 
 /* メッセージ */
 let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+
+/* 初期：スライダー復元 */
+loadSlidersFromStorage();
 </script>
 </body></html>
