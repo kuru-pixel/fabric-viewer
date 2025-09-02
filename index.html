@@ -322,28 +322,32 @@ const shotsBox = $('shots');
 let lastShotSig = '';
 let shotDebounce;
 
+// 『なし』直後は1回だけ自動スクショを抑止するフラグ
+let lastOpWasNone = false;
+
+// 現在「実際に見えている割り当て」を元にシグネチャ化
 function currentSignature(){
-  const pairs = Object.entries(assign).sort((a,b)=>a[0].localeCompare(b[0])).map(([u,k])=>`${u}:${k}`).join('|');
+  const pairs = targetMats.map(m=>{
+    const k = assign[m.uuid];
+    return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
+  }).join('|');
   const sliders = SLOTS.map(k=>`${k}:${state[k].repeat},${state[k].rotDeg}`).join('|');
   return pairs+'#'+sliders;
 }
-function patternIsComplete(){
-  const used = Object.keys(assign);
-  if(used.length===0) return false;
-  for(const uuid of used){
-    const key = assign[uuid];
-    if(key==='—') return false;
-    const st = state[key];
-    if(!st || !st.tex) return false;
-  }
-  return true;
+// 画面上に1つでもテクスチャが貼られているか
+function hasAnyVisibleTexture(){
+  return targetMats.some(m => m && isSupportedMat(m) && m.map);
 }
 function debounceMaybeCapture(){
   clearTimeout(shotDebounce);
   shotDebounce = setTimeout(()=>{
-    if(!patternIsComplete()) return;
+    // 『なし』直後は1回だけスキップ（白戻しを履歴に残さない）
+    if (lastOpWasNone){ lastOpWasNone=false; return; }
+    // 何か一つでも貼られていなければ撮らない
+    if (!hasAnyVisibleTexture()) return;
+
     const sig = currentSignature();
-    if(sig===lastShotSig) return;           // 直前と同一は撮らない
+    if(sig===lastShotSig) return;           // 同一状態は撮らない
     captureShot(sig);
   }, 250);
 }
@@ -412,7 +416,8 @@ function clearTexture(key){
   const s = state[key];
   s.tex = null; s.url=''; s.fileEl.value = '';
   updateBubblePreviews();
-  applyAssignments(); // クリア時は自動スクショ条件を満たさないので撮られない
+  lastOpWasNone = true;  // 『なし』扱い：この直後の自動スクショを抑止
+  applyAssignments();
   msg(`生地${key}をクリアしました`);
 }
 SLOTS.forEach(k=>{
@@ -485,7 +490,7 @@ function isFrontFacing(hit){
   if(!hit.face || !hit.object) return true;
   const n = hit.face.normal.clone().applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize();
   const camDir = camera.position.clone().sub(hit.point).normalize();
-  return n.dot(camDir) > 0.15; // ちょっと余裕を持たせる
+  return n.dot(camDir) > 0.15; // 少し余裕
 }
 
 function onCanvasClick(ev){
@@ -557,15 +562,16 @@ function assignToSelected(key){
   }
   if(!mat) return;
 
-  assign[mat.uuid] = key;   // '—'で解除
-  applyAssignments();       // 中で自動スクショ判定
+  assign[mat.uuid] = key;                 // '—'で解除
+  lastOpWasNone = (key === '—');          // 『なし』はこの操作だけスクショ抑止
+  applyAssignments();                     // 中で自動スクショ判定
 }
 chipEls.A.onclick   = ()=>assignToSelected('A');
 chipEls.B.onclick   = ()=>assignToSelected('B');
 chipEls.C.onclick   = ()=>assignToSelected('C');
 chipEls.D.onclick   = ()=>assignToSelected('D');
 chipEls.E.onclick   = ()=>assignToSelected('E');
-chipEls.None.onclick= ()=>assignToSelected('—'); // 「なし」→自動スクショは発火しない
+chipEls.None.onclick= ()=>assignToSelected('—');
 
 /* パネル開閉（保存つき） */
 const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
