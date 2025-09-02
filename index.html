@@ -152,7 +152,7 @@
 /* ========= 基本 ========= */
 const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
-const SLOTS = ['A','B','C','D','E']; // スロット拡張
+const SLOTS = ['A','B','C','D','E'];
 
 /* three.js */
 const canvas = $('c');
@@ -188,19 +188,16 @@ function isSupportedMat(m){
 }
 
 /* マテリアル抽出（使用数カウントつき） */
-const materialUseCount = new Map();  // material.uuid -> 参照数
+const materialUseCount = new Map();
 function analyze(root){
   const mats=new Set();
   materialUseCount.clear();
   root.traverse(o=>{
     if(o.isMesh && o.material){
       if(Array.isArray(o.material)){
-        o.material.forEach(m=>{
-          if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
-        });
+        o.material.forEach(m=>{ if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }});
       }else{
-        const m=o.material;
-        if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
+        const m=o.material; if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
       }
     }
   });
@@ -231,11 +228,7 @@ const state = {
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
 
-const LS_KEYS = {
-  sliders: 'fv_sliders_v1',
-  assign : 'fv_assign_v1',
-  ui     : 'uiCollapsed'
-};
+const LS_KEYS = { sliders:'fv_sliders_v1', assign:'fv_assign_v1', ui:'uiCollapsed' };
 
 function saveSlidersToStorage(){
   const data = {};
@@ -268,7 +261,7 @@ function loadAssignFromStorage(){
   }catch(e){}
 }
 
-/* 自動UVスケール推定（初回のみ＝スライダー保存がまだ無い時） */
+/* 自動UVスケール推定（初回のみ） */
 function applyAutoUVScaleIfFirst(rootObj){
   const had = localStorage.getItem(LS_KEYS.sliders);
   if(had) return;
@@ -278,9 +271,7 @@ function applyAutoUVScaleIfFirst(rootObj){
   let r = L * 2.0;
   r = Math.max(1, Math.min(12, Math.round(r*2)/2));
   SLOTS.forEach(k=>{
-    state[k].repeat = r;
-    state[k].repEl.value = r;
-    state[k].repv.textContent = r;
+    state[k].repeat = r; state[k].repEl.value = r; state[k].repv.textContent = r;
   });
   saveSlidersToStorage();
 }
@@ -321,11 +312,10 @@ const MAX_SHOTS = 6;
 const shotsBox = $('shots');
 let lastShotSig = '';
 let shotDebounce;
-
-// 『なし』直後は1回だけ自動スクショを抑止するフラグ
+// 『なし』直後は1回だけ自動スクショを抑止する
 let lastOpWasNone = false;
 
-// 現在「実際に見えている割り当て」を元にシグネチャ化
+// 今の画面状態の署名（割当+スライダー）
 function currentSignature(){
   const pairs = targetMats.map(m=>{
     const k = assign[m.uuid];
@@ -334,20 +324,24 @@ function currentSignature(){
   const sliders = SLOTS.map(k=>`${k}:${state[k].repeat},${state[k].rotDeg}`).join('|');
   return pairs+'#'+sliders;
 }
-// 画面上に1つでもテクスチャが貼られているか
-function hasAnyVisibleTexture(){
-  return targetMats.some(m => m && isSupportedMat(m) && m.map);
+
+// ★全部の対象マテリアルが「A〜Eのどれかに割り当て済み」かつ「そのスロットに画像がある」かを判定
+function allFabricCovered(){
+  if (targetMats.length === 0) return false;
+  return targetMats.every(m=>{
+    const k = assign[m.uuid];
+    return !!(k && k !== '—' && state[k] && state[k].tex);
+  });
 }
+
 function debounceMaybeCapture(){
   clearTimeout(shotDebounce);
   shotDebounce = setTimeout(()=>{
-    // 『なし』直後は1回だけスキップ（白戻しを履歴に残さない）
-    if (lastOpWasNone){ lastOpWasNone=false; return; }
-    // 何か一つでも貼られていなければ撮らない
-    if (!hasAnyVisibleTexture()) return;
+    if (lastOpWasNone){ lastOpWasNone=false; return; } // 『なし』直後は撮らない
+    if (!allFabricCovered()) return;                    // ← どこか白が残っていたら撮らない
 
     const sig = currentSignature();
-    if(sig===lastShotSig) return;           // 同一状態は撮らない
+    if(sig===lastShotSig) return;                       // 同一状態は撮らない
     captureShot(sig);
   }, 250);
 }
@@ -357,14 +351,12 @@ function captureShot(sig){
   const img = new Image();
   img.src = dataUrl;
   img.title = 'クリックで復元';
-  // 保存するスナップ（assign + sliders）
   const snap = {
     assign: {...assign},
     sliders: Object.fromEntries(SLOTS.map(k=>[k,{repeat:state[k].repeat, rotDeg:state[k].rotDeg}]))
   };
   img.dataset.snap = JSON.stringify(snap);
   img.onclick = ()=>{
-    // 復元
     const s = JSON.parse(img.dataset.snap);
     Object.keys(assign).forEach(k=>delete assign[k]);
     Object.assign(assign, s.assign);
@@ -381,7 +373,6 @@ function captureShot(sig){
     saveSlidersToStorage();
     msg('履歴から復元しました');
   };
-  // 左に追加（row-reverse なので prepend で左側）
   shotsBox.prepend(img);
   while(shotsBox.children.length>MAX_SHOTS) shotsBox.removeChild(shotsBox.lastChild);
   lastShotSig = sig;
@@ -416,13 +407,11 @@ function clearTexture(key){
   const s = state[key];
   s.tex = null; s.url=''; s.fileEl.value = '';
   updateBubblePreviews();
-  lastOpWasNone = true;  // 『なし』扱い：この直後の自動スクショを抑止
+  lastOpWasNone = true;   // 『なし』扱い：この直後の自動スクショを抑止
   applyAssignments();
   msg(`生地${key}をクリアしました`);
 }
-SLOTS.forEach(k=>{
-  $('clear'+k).addEventListener('click', ()=>clearTexture(k));
-});
+SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
 
 /* スライダー変更（保存 & 即反映） */
 SLOTS.forEach(k=>{
@@ -470,10 +459,7 @@ function showHighlight(mesh){
   overlay.renderOrder = 9999;
   mesh.add(overlay);
 }
-function hideHighlight(){
-  if(overlay && overlay.parent){ overlay.parent.remove(overlay); }
-  overlay = null;
-}
+function hideHighlight(){ if(overlay && overlay.parent){ overlay.parent.remove(overlay); } overlay = null; }
 function hideBubble(){ bubble.style.display='none'; }
 
 function setBubbleScreenPos(world){
@@ -484,13 +470,13 @@ function setBubbleScreenPos(world){
   bubble.style.top  = `${y}px`;
 }
 
-/* 裏面クリック無効：法線とカメラ方向の内積で判定 */
+/* 裏面クリック無効 */
 const _nm = new THREE.Matrix3();
 function isFrontFacing(hit){
   if(!hit.face || !hit.object) return true;
   const n = hit.face.normal.clone().applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize();
   const camDir = camera.position.clone().sub(hit.point).normalize();
-  return n.dot(camDir) > 0.15; // 少し余裕
+  return n.dot(camDir) > 0.15;
 }
 
 function onCanvasClick(ev){
@@ -499,16 +485,14 @@ function onCanvasClick(ev){
   mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
   ray.setFromCamera(mouse, camera);
 
-  const targets = [];
-  scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
+  const targets = []; scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
   const hits = ray.intersectObjects(targets, true);
   const hit = hits.find(h => h.object && h.object.material && isFrontFacing(h));
 
   if(!hit){ pick=null; pickMatIndex=null; hideHighlight(); hideBubble(); return; }
 
   pick = hit.object;
-  pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number')
-    ? hit.face.materialIndex : null;
+  pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number') ? hit.face.materialIndex : null;
   showHighlight(pick);
 
   const wp = hit.point.clone().add(new THREE.Vector3(0, 0.02, 0));
@@ -521,27 +505,21 @@ canvas.addEventListener('pointerdown', onCanvasClick);
 /* 同じMaterialを共有していたらクローンして専有化 */
 function ensureUniqueMaterialOnMesh(mesh, idx){
   if(Array.isArray(mesh.material)){
-    const old = mesh.material[idx];
-    if(!old) return null;
+    const old = mesh.material[idx]; if(!old) return null;
     const count = materialUseCount.get(old.uuid)||0;
     if(count > 1){
-      const clone = old.clone();
-      mesh.material[idx] = clone;
-      materialUseCount.set(old.uuid, count-1);
-      materialUseCount.set(clone.uuid, 1);
+      const clone = old.clone(); mesh.material[idx] = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
       if(isSupportedMat(clone)) targetMats.push(clone);
       return clone;
     }
     return old;
   }else{
-    const old = mesh.material;
-    if(!old) return null;
+    const old = mesh.material; if(!old) return null;
     const count = materialUseCount.get(old.uuid)||0;
     if(count > 1){
-      const clone = old.clone();
-      mesh.material = clone;
-      materialUseCount.set(old.uuid, count-1);
-      materialUseCount.set(clone.uuid, 1);
+      const clone = old.clone(); mesh.material = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
       if(isSupportedMat(clone)) targetMats.push(clone);
       return clone;
     }
@@ -549,10 +527,9 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
   }
 }
 
-/* 吹き出し → 割り当て（クリック面サブマテリアル“だけ”） */
+/* 吹き出し → 割り当て（クリック面のサブマテリアルのみ） */
 function assignToSelected(key){
   if(!pick || !pick.material) return;
-
   let mat = null;
   if(Array.isArray(pick.material)){
     const idx = (pickMatIndex!=null) ? pickMatIndex : 0;
@@ -562,9 +539,9 @@ function assignToSelected(key){
   }
   if(!mat) return;
 
-  assign[mat.uuid] = key;                 // '—'で解除
-  lastOpWasNone = (key === '—');          // 『なし』はこの操作だけスクショ抑止
-  applyAssignments();                     // 中で自動スクショ判定
+  assign[mat.uuid] = key;
+  lastOpWasNone = (key === '—');     // 『なし』はこの操作だけスクショ抑止
+  applyAssignments();                // 中で自動スクショ判定
 }
 chipEls.A.onclick   = ()=>assignToSelected('A');
 chipEls.B.onclick   = ()=>assignToSelected('B');
@@ -578,7 +555,7 @@ const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
 function setCollapsed(v){
   uiWrap.classList.toggle('collapsed', v);
   uiToggle.textContent = v ? '›' : '‹';
-  localStorage.setItem('uiCollapsed', v ? '1' : '0');
+  localStorage.setItem(LS_KEYS.ui, v ? '1' : '0');
 }
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
 setCollapsed(localStorage.getItem(LS_KEYS.ui)==='1');
@@ -598,7 +575,7 @@ function loop(){
 /* メッセージ */
 let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
 
-/* 表示リセット（画像は残す） */
+/* 表示リセット */
 $('resetAll').addEventListener('click', ()=>{
   Object.keys(assign).forEach(k=>assign[k]='—');
   SLOTS.forEach(k=>{
