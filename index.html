@@ -150,7 +150,10 @@
 
 <script>
 /* ========= 基本 ========= */
-const GLB_PATH = './assets/garment.glb';
+// ★キャッシュバスター：値を変えると必ず最新を取りに行く
+const ASSET_VER = 'v2';
+const GLB_PATH = `./assets/garment.glb?${ASSET_VER}`;
+
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C','D','E'];
 
@@ -165,11 +168,50 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
+/* GLTFLoader（内部参照にもバージョン付与） */
+const manager = new THREE.LoadingManager();
+manager.setURLModifier((url)=> url + (url.includes('?')?'&':'?') + ASSET_VER);
+
 /* モデル */
 let model, targetMats = [];
-const loader = new THREE.GLTFLoader();
+const loader = new THREE.GLTFLoader(manager);
+
+/* ---- 右下の欠片などゴミ島を非表示にする ---- */
+function pruneIslands(root){
+  const meshes = [];
+  root.traverse(o=>{ if(o.isMesh) meshes.push(o); });
+  if(!meshes.length) return;
+
+  // 最大のメッシュを本体とみなす
+  let main = meshes[0], mainDiag = -Infinity, mainCenter = new THREE.Vector3();
+  meshes.forEach(m=>{
+    const b = new THREE.Box3().setFromObject(m);
+    const d = b.getSize(new THREE.Vector3()).length();
+    if(d > mainDiag){ main = m; mainDiag = d; mainCenter.copy(b.getCenter(new THREE.Vector3())); }
+  });
+
+  // 小さすぎる or 離れすぎるメッシュは非表示
+  meshes.forEach(m=>{
+    if(m === main) return;
+    const b = new THREE.Box3().setFromObject(m);
+    const d = b.getSize(new THREE.Vector3()).length();
+    const c = b.getCenter(new THREE.Vector3());
+    const dist = c.distanceTo(mainCenter);
+    const tooSmall = d < mainDiag * 0.12;
+    const tooFar   = dist > mainDiag * 1.20;
+    if(tooSmall || tooFar){ m.visible = false; }
+  });
+}
+
 loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
+  model = glb.scene;
+
+  pruneIslands(model);               // ← 欠片を非表示
+
+  scene.add(model);
+  analyze(model);
+  fit(model);
+  msg('garment.glb を読み込みました');
   applyAutoUVScaleIfFirst(model);
   loadAssignFromStorage(); applyAssignments();
 }, undefined, ()=>{
@@ -193,7 +235,8 @@ function analyze(root){
   const mats=new Set();
   materialUseCount.clear();
   root.traverse(o=>{
-    if(o.isMesh && o.material){
+    // 非表示になった欠片はスキップ
+    if(o.isMesh && o.visible && o.material){
       if(Array.isArray(o.material)){
         o.material.forEach(m=>{ if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }});
       }else{
