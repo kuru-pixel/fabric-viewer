@@ -168,19 +168,51 @@ const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); s
 /* モデル */
 let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
-loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
-  applyAutoUVScaleIfFirst(model);
-  loadAssignFromStorage(); applyAssignments();
-}, undefined, ()=>{
-  const g=new THREE.BoxGeometry(1,1.2,0.5);
-  const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
-  const cube=new THREE.Mesh(g,m); scene.add(cube);
-  targetMats=[cube.material]; updateMatInfo();
-  applyAutoUVScaleIfFirst(cube);
-  loadAssignFromStorage(); applyAssignments();
-  msg('assets/garment.glb が無いのでキューブ表示');
-});
+loader.load(
+  GLB_PATH,
+  (glb) => {
+    // ★ ここから追加：GLBが使っている拡張＆画像の種別をログに出す
+    const json = glb.parser?.json || {};
+    const used = json.extensionsUsed || [];
+    const images = (json.images || []).map((im, i) => ({
+      i,
+      mime: im.mimeType || '(unknown)',
+      uri: im.uri ? im.uri : '(embedded bufferView)',
+    }));
+    console.log('[GLB INFO] extensionsUsed:', used);
+    console.table(images);
+    window.__glbinfo = { used, images };  // コンソールから再参照できるように
+
+    // 従来処理
+    model = glb.scene;
+    scene.add(model);
+    analyze(model);
+    fit(model);
+    msg('garment.glb を読み込みました');
+    applyAutoUVScaleIfFirst(model);
+    loadAssignFromStorage();
+    applyAssignments();
+  },
+  undefined,
+  (err) => {
+    // ★ ここを少し強化：エラーの中身をはっきり表示
+    console.error('GLB load failed:', err);
+    msg('GLB読み込みエラー： ' + (err?.message || err));
+
+    // フォールバックのキューブ表示（あなたの元の処理）
+    const g = new THREE.BoxGeometry(1, 1.2, 0.5);
+    const m = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.1, roughness: 0.7 });
+    const cube = new THREE.Mesh(g, m);
+    scene.add(cube);
+    targetMats = [cube.material];
+    updateMatInfo();
+    applyAutoUVScaleIfFirst(cube);
+    loadAssignFromStorage();
+    applyAssignments();
+    msg('assets/garment.glb が無い/読めないのでキューブ表示');
+  }
+);
+
 
 /* ===== ユーティリティ ===== */
 function isSupportedMat(m){
