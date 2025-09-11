@@ -5,32 +5,57 @@
 <style>
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+  /* ==== 左パネル（開閉スライド） ==== */
   #uiWrap{position:fixed;z-index:5;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
   #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:420px}
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
   .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
   .mini{margin-left:6px;font-size:12px;padding:2px 6px}
-  #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
+
+  #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;
+    background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
   #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
+
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
   .block h4{margin:0 0 4px 0;font-size:13px}
+
   #footer{position:fixed;right:10px;bottom:10px;z-index:4;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
   #msg{position:fixed;z-index:6;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
-  #bubble{position:fixed; z-index:7; display:none; transform:translate(-50%,-115%); pointer-events:auto; background:#111e; color:#fff; backdrop-filter: blur(4px); border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;}
+
+  /* ==== クリック時の吹き出し ==== */
+  #bubble{
+    position:fixed; z-index:7; display:none; transform:translate(-50%,-115%); pointer-events:auto;
+    background:#111e; color:#fff; backdrop-filter: blur(4px);
+    border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;
+  }
   #bubble .row{display:flex; gap:6px; align-items:center; flex-wrap:wrap; max-width:320px}
-  .chip{width:56px;height:56px;border-radius:8px;border:1px solid #fff5;background:#222 center/cover no-repeat;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;letter-spacing:.5px;}
+  .chip{
+    width:56px;height:56px;border-radius:8px;border:1px solid #fff5;background:#222 center/cover no-repeat;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-weight:700;letter-spacing:.5px;
+  }
   .chip.none{background:#222}
   .chip:hover{outline:2px solid #fff9}
-  #shots{position:fixed; z-index:8; top:10px; right:10px; display:flex; gap:8px; flex-direction:row-reverse; pointer-events:auto;}
-  #shots img{width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid #ffffff55;background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;}
+
+  /* ==== 右上：履歴サムネ ==== */
+  #shots{
+    position:fixed; z-index:8; top:10px; right:10px; display:flex; gap:8px; flex-direction:row-reverse;
+    pointer-events:auto;
+  }
+  #shots img{
+    width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid #ffffff55;
+    background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;
+  }
   #shots img:hover{ outline:2px solid #fff9 }
 </style>
 </head><body>
 
+<!-- ===== 左パネル ===== -->
 <div id="uiWrap">
   <div id="ui">
     <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
+
     <div class="btnRow">
       <button id="resetCam">カメラリセット</button>
       <button id="resetAll" title="倍率/回転を初期化・割り当てを全て『なし』・見た目を白に戻す">リセット</button>
@@ -38,42 +63,71 @@
       <small id="matinfo" style="margin-left:auto;"></small>
     </div>
 
-    <!-- A〜E -->
-    <div class="block"><h4>生地A</h4><div class="btnRow">
-      <label style="margin:0"><input id="texA" type="file" accept="image/*"></label><button id="clearA" class="mini" type="button">クリアA</button></div>
+    <!-- A -->
+    <div class="block">
+      <h4>生地A</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texA" type="file" accept="image/*"></label>
+        <button id="clearA" class="mini" type="button">クリアA</button>
+      </div>
       <label>タイル倍率A <input id="repeatA" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvA">3</span></label>
       <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
     </div>
-    <div class="block"><h4>生地B</h4><div class="btnRow">
-      <label style="margin:0"><input id="texB" type="file" accept="image/*"></label><button id="clearB" class="mini" type="button">クリアB</button></div>
+
+    <!-- B -->
+    <div class="block">
+      <h4>生地B</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texB" type="file" accept="image/*"></label>
+        <button id="clearB" class="mini" type="button">クリアB</button>
+      </div>
       <label>タイル倍率B <input id="repeatB" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvB">3</span></label>
       <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
     </div>
-    <div class="block"><h4>生地C</h4><div class="btnRow">
-      <label style="margin:0"><input id="texC" type="file" accept="image/*"></label><button id="clearC" class="mini" type="button">クリアC</button></div>
+
+    <!-- C -->
+    <div class="block">
+      <h4>生地C</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texC" type="file" accept="image/*"></label>
+        <button id="clearC" class="mini" type="button">クリアC</button>
+      </div>
       <label>タイル倍率C <input id="repeatC" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvC">3</span></label>
       <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
     </div>
-    <div class="block"><h4>生地D</h4><div class="btnRow">
-      <label style="margin:0"><input id="texD" type="file" accept="image/*"></label><button id="clearD" class="mini" type="button">クリアD</button></div>
+
+    <!-- D -->
+    <div class="block">
+      <h4>生地D</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texD" type="file" accept="image/*"></label>
+        <button id="clearD" class="mini" type="button">クリアD</button>
+      </div>
       <label>タイル倍率D <input id="repeatD" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvD">3</span></label>
       <label>回転D（度） <input id="rotD" type="range" min="0" max="180" step="1" value="0"> <span id="rotvD">0</span></label>
     </div>
-    <div class="block"><h4>生地E</h4><div class="btnRow">
-      <label style="margin:0"><input id="texE" type="file" accept="image/*"></label><button id="clearE" class="mini" type="button">クリアE</button></div>
+
+    <!-- E -->
+    <div class="block">
+      <h4>生地E</h4>
+      <div class="btnRow">
+        <label style="margin:0"><input id="texE" type="file" accept="image/*"></label>
+        <button id="clearE" class="mini" type="button">クリアE</button>
+      </div>
       <label>タイル倍率E <input id="repeatE" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvE">3</span></label>
       <label>回転E（度） <input id="rotE" type="range" min="0" max="180" step="1" value="0"> <span id="rotvE">0</span></label>
     </div>
 
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>
   </div>
+
   <button id="uiToggle" aria-label="toggle panel">‹</button>
 </div>
 
-<!-- 右上：履歴 -->
+<!-- 右上：履歴サムネ -->
 <div id="shots"></div>
 
-<!-- 吹き出し -->
+<!-- クリック位置に出る吹き出し（A〜E + なし） -->
 <div id="bubble">
   <div style="font-size:12px;margin-bottom:4px">生地を割り当て</div>
   <div class="row">
@@ -90,17 +144,13 @@
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
 
-<!-- three.js -->
 <script src="./assets/threejs/three.min.js"></script>
 <script src="./assets/threejs/GLTFLoader.js"></script>
-<script src="./assets/threejs/DRACOLoader.js"></script>  <!-- 追加 -->
-<script src="./assets/threejs/KTX2Loader.js"></script>  <!-- 任意 -->
 <script src="./assets/threejs/OrbitControls.js"></script>
 
 <script>
 /* ========= 基本 ========= */
-const ASSET_VER = 'v2';                         // ← 値を変えるとキャッシュ無効化
-const GLB_PATH  = `./assets/garment.glb?${ASSET_VER}`;
+const GLB_PATH = './assets/garment.glb';
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C','D','E'];
 
@@ -115,73 +165,35 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
 
-/* Loader & cache-bust for internal URIs */
-const manager = new THREE.LoadingManager();
-manager.setURLModifier((url)=> url + (url.includes('?')?'&':'?') + ASSET_VER);
-const loader = new THREE.GLTFLoader(manager);
-
-/* ==== ここが追加：DRACO / KTX2 サポート ==== */
-try{
-  if (THREE.DRACOLoader){
-    const draco = new THREE.DRACOLoader(manager);
-    draco.setDecoderPath('./assets/threejs/draco/');   // draco_* ファイルを置く
-    loader.setDRACOLoader(draco);
-  }
-  if (THREE.KTX2Loader){
-    const ktx2 = new THREE.KTX2Loader(manager).setTranscoderPath('./assets/threejs/basis/').detectSupport(renderer);
-    if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2);
-  }
-}catch(e){ console.warn('Optional decoders setup failed:', e); }
-
-/* ====== モデル ====== */
+/* モデル */
 let model, targetMats = [];
-
-function showAsCubeFallback(note){
+const loader = new THREE.GLTFLoader();
+loader.load(GLB_PATH, (glb)=>{
+  model=glb.scene; scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
+  applyAutoUVScaleIfFirst(model);
+  loadAssignFromStorage(); applyAssignments();
+}, undefined, ()=>{
   const g=new THREE.BoxGeometry(1,1.2,0.5);
   const m=new THREE.MeshStandardMaterial({color:0x999999,metalness:0.1,roughness:0.7});
   const cube=new THREE.Mesh(g,m); scene.add(cube);
   targetMats=[cube.material]; updateMatInfo();
   applyAutoUVScaleIfFirst(cube);
   loadAssignFromStorage(); applyAssignments();
-  msg(note || 'assets/garment.glb が無いのでキューブ表示');
-}
-
-function pruneIslands(root){
-  const meshes=[]; root.traverse(o=>{ if(o.isMesh) meshes.push(o); });
-  if(!meshes.length) return;
-  let main=meshes[0], mainDiag=-Infinity, mainCenter=new THREE.Vector3();
-  meshes.forEach(m=>{ const b=new THREE.Box3().setFromObject(m); const d=b.getSize(new THREE.Vector3()).length();
-    if(d>mainDiag){ main=m; mainDiag=d; mainCenter.copy(b.getCenter(new THREE.Vector3())); }});
-  meshes.forEach(m=>{
-    if(m===main) return;
-    const b=new THREE.Box3().setFromObject(m);
-    const d=b.getSize(new THREE.Vector3()).length();
-    const dist=b.getCenter(new THREE.Vector3()).distanceTo(mainCenter);
-    if(d<mainDiag*0.12 || dist>mainDiag*1.20) m.visible=false;
-  });
-}
-
-loader.load(GLB_PATH, (glb)=>{
-  model=glb.scene;
-  pruneIslands(model);
-  scene.add(model); analyze(model); fit(model); msg('garment.glb を読み込みました');
-  applyAutoUVScaleIfFirst(model);
-  loadAssignFromStorage(); applyAssignments();
-}, undefined, (err)=>{
-  console.error('GLB load error:', err);
-  showAsCubeFallback('garment.glb の読み込みに失敗しました（コンソール参照）');
+  msg('assets/garment.glb が無いのでキューブ表示');
 });
 
 /* ===== ユーティリティ ===== */
 function isSupportedMat(m){
   return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshBasicMaterial);
 }
+
+/* マテリアル抽出（使用数カウントつき） */
 const materialUseCount = new Map();
 function analyze(root){
   const mats=new Set();
   materialUseCount.clear();
   root.traverse(o=>{
-    if(o.isMesh && o.visible && o.material){
+    if(o.isMesh && o.material){
       if(Array.isArray(o.material)){
         o.material.forEach(m=>{ if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }});
       }else{
@@ -193,6 +205,8 @@ function analyze(root){
   updateMatInfo();
 }
 function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
+
+/* カメラ */
 function fit(obj){
   const box=new THREE.Box3().setFromObject(obj),
         size=box.getSize(new THREE.Vector3()).length(),
@@ -203,7 +217,7 @@ function fit(obj){
   camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* ===== A〜E 状態＆保存 ===== */
+/* ===== A〜E の状態 & 永続化 ===== */
 const texLoader = new THREE.TextureLoader();
 const state = {
   A:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA') },
@@ -213,176 +227,366 @@ const state = {
   E:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatE'), rotEl:$('rotE'), repv:$('repvE'), rotv:$('rotvE'), fileEl:$('texE') },
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
+
 const LS_KEYS = { sliders:'fv_sliders_v1', assign:'fv_assign_v1', ui:'uiCollapsed' };
 
 function saveSlidersToStorage(){
-  const data = {}; SLOTS.forEach(k=>{ data[k]={repeat:state[k].repeat, rotDeg:state[k].rotDeg}; });
+  const data = {};
+  SLOTS.forEach(k=>{ data[k] = {repeat: state[k].repeat, rotDeg: state[k].rotDeg}; });
   try{ localStorage.setItem(LS_KEYS.sliders, JSON.stringify(data)); }catch(e){}
 }
 function loadSlidersFromStorage(){
   try{
-    const raw=localStorage.getItem(LS_KEYS.sliders); if(!raw) return false;
-    const data=JSON.parse(raw); let applied=false;
+    const raw = localStorage.getItem(LS_KEYS.sliders);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    let applied = false;
     SLOTS.forEach(k=>{
-      if(data[k]){ const rep=Number(data[k].repeat), rot=Number(data[k].rotDeg);
-        if(Number.isFinite(rep)){ state[k].repeat=rep; state[k].repEl.value=rep; state[k].repv.textContent=rep; applied=true; }
-        if(Number.isFinite(rot)){ state[k].rotDeg=rot; state[k].rotEl.value=rot; state[k].rotv.textContent=rot; applied=true; }
+      if(data[k]){
+        const rep = Number(data[k].repeat); const rot = Number(data[k].rotDeg);
+        if(Number.isFinite(rep)){ state[k].repeat = rep; state[k].repEl.value = rep; state[k].repv.textContent = rep; applied = true; }
+        if(Number.isFinite(rot)){ state[k].rotDeg = rot; state[k].rotEl.value = rot; state[k].rotv.textContent = rot; applied = true; }
       }
-    }); return applied;
+    });
+    return applied;
   }catch(e){ return false; }
 }
 function saveAssignToStorage(){ try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){} }
 function loadAssignFromStorage(){
-  try{ const raw=localStorage.getItem(LS_KEYS.assign); if(!raw) return; Object.assign(assign, JSON.parse(raw)); }catch(e){}
+  try{
+    const raw = localStorage.getItem(LS_KEYS.assign);
+    if(!raw) return;
+    const obj = JSON.parse(raw);
+    Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
+  }catch(e){}
 }
 
-/* 自動UVスケール（初回のみ） */
+/* 自動UVスケール推定（初回のみ） */
 function applyAutoUVScaleIfFirst(rootObj){
-  if(localStorage.getItem(LS_KEYS.sliders)) return;
-  const box=new THREE.Box3().setFromObject(rootObj); const s=box.getSize(new THREE.Vector3());
-  let r=Math.sqrt(s.x*s.y)*2.0; r=Math.max(1, Math.min(12, Math.round(r*2)/2));
-  SLOTS.forEach(k=>{ state[k].repeat=r; state[k].repEl.value=r; state[k].repv.textContent=r; });
+  const had = localStorage.getItem(LS_KEYS.sliders);
+  if(had) return;
+  const box = new THREE.Box3().setFromObject(rootObj);
+  const size = box.getSize(new THREE.Vector3());
+  const L = Math.sqrt(size.x * size.y);
+  let r = L * 2.0;
+  r = Math.max(1, Math.min(12, Math.round(r*2)/2));
+  SLOTS.forEach(k=>{
+    state[k].repeat = r; state[k].repEl.value = r; state[k].repv.textContent = r;
+  });
   saveSlidersToStorage();
 }
 
-/* テクスチャ適用系 */
-function prepTexture(t){ if(!t) return;
-  if(t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
-  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+/* テクスチャ前処理＆適用 */
+function prepTexture(t){
+  if(!t) return;
+  if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
 function applyParamsToTexture(key){
-  const s=state[key], t=s.tex; if(!t) return;
-  s.repv.textContent=s.repeat; s.rotv.textContent=s.rotDeg;
+  const s = state[key]; const t = s.tex; if(!t) return;
+  s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
   t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
-  t.rotation=parseFloat(s.rotDeg)*Math.PI/180; t.center.set(0.5,0.5); t.needsUpdate=true;
+  t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
+  t.center.set(0.5,0.5); t.needsUpdate = true;
   targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
 }
-let lastOpWasNone=false, lastShotSig='', shotDebounce; const shotsBox=$('shots'), MAX_SHOTS=6;
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key=assign[m.uuid]; const tex=(key&&state[key])?state[key].tex:null;
+    const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
     if(isSupportedMat(m)){
-      if(!tex || key==='—'){ m.map=null; if(m.color) m.color.set(0xffffff); }
-      else{ m.map=tex; }
-      m.needsUpdate=true;
+      if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
+      else { m.map = tex; }
+      m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
   SLOTS.forEach(applyParamsToTexture);
   saveAssignToStorage();
-  debounceMaybeCapture();
+  debounceMaybeCapture();  // ← 割り当て後に自動スクショ判定
 }
 
-/* スクショ履歴 */
+/* ====== スクショ履歴 ====== */
+const MAX_SHOTS = 6;
+const shotsBox = $('shots');
+let lastShotSig = '';
+let shotDebounce;
+// 『なし』直後は1回だけ自動スクショを抑止する
+let lastOpWasNone = false;
+
+// 今の画面状態の署名（割当+スライダー）
 function currentSignature(){
-  const pairs=targetMats.map(m=>{ const k=assign[m.uuid]; return (k&&state[k]&&state[k].tex)?`${m.uuid}:${k}`:`${m.uuid}:-`; }).join('|');
-  const sliders=SLOTS.map(k=>`${k}:${state[k].repeat},${state[k].rotDeg}`).join('|');
+  const pairs = targetMats.map(m=>{
+    const k = assign[m.uuid];
+    return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
+  }).join('|');
+  const sliders = SLOTS.map(k=>`${k}:${state[k].repeat},${state[k].rotDeg}`).join('|');
   return pairs+'#'+sliders;
 }
+
+// ★全部の対象マテリアルが「A〜Eのどれかに割り当て済み」かつ「そのスロットに画像がある」かを判定
 function allFabricCovered(){
-  if(targetMats.length===0) return false;
-  return targetMats.every(m=>{ const k=assign[m.uuid]; return !!(k && k!=='—' && state[k] && state[k].tex); });
+  if (targetMats.length === 0) return false;
+  return targetMats.every(m=>{
+    const k = assign[m.uuid];
+    return !!(k && k !== '—' && state[k] && state[k].tex);
+  });
 }
+
 function debounceMaybeCapture(){
   clearTimeout(shotDebounce);
-  shotDebounce=setTimeout(()=>{
-    if(lastOpWasNone){ lastOpWasNone=false; return; }
-    if(!allFabricCovered()) return;
-    const sig=currentSignature(); if(sig===lastShotSig) return; captureShot(sig);
-  },250);
+  shotDebounce = setTimeout(()=>{
+    if (lastOpWasNone){ lastOpWasNone=false; return; } // 『なし』直後は撮らない
+    if (!allFabricCovered()) return;                    // ← どこか白が残っていたら撮らない
+
+    const sig = currentSignature();
+    if(sig===lastShotSig) return;                       // 同一状態は撮らない
+    captureShot(sig);
+  }, 250);
 }
 function captureShot(sig){
   renderer.render(scene,camera);
-  const dataUrl=renderer.domElement.toDataURL('image/png');
-  const img=new Image(); img.src=dataUrl; img.title='クリックで復元';
-  const snap={ assign:{...assign}, sliders:Object.fromEntries(SLOTS.map(k=>[k,{repeat:state[k].repeat, rotDeg:state[k].rotDeg}])) };
-  img.dataset.snap=JSON.stringify(snap);
-  img.onclick=()=>{
-    const s=JSON.parse(img.dataset.snap);
-    Object.keys(assign).forEach(k=>delete assign[k]); Object.assign(assign,s.assign);
-    SLOTS.forEach(k=>{ state[k].repeat=s.sliders[k].repeat; state[k].rotDeg=s.sliders[k].rotDeg;
-      state[k].repEl.value=state[k].repeat; state[k].rotEl.value=state[k].rotDeg;
-      state[k].repv.textContent=state[k].repeat; state[k].rotv.textContent=state[k].rotDeg; applyParamsToTexture(k); });
-    applyAssignments(); saveSlidersToStorage(); msg('履歴から復元しました');
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+  const img = new Image();
+  img.src = dataUrl;
+  img.title = 'クリックで復元';
+  const snap = {
+    assign: {...assign},
+    sliders: Object.fromEntries(SLOTS.map(k=>[k,{repeat:state[k].repeat, rotDeg:state[k].rotDeg}]))
   };
-  shotsBox.prepend(img); while(shotsBox.children.length>MAX_SHOTS) shotsBox.removeChild(shotsBox.lastChild);
-  lastShotSig=sig;
+  img.dataset.snap = JSON.stringify(snap);
+  img.onclick = ()=>{
+    const s = JSON.parse(img.dataset.snap);
+    Object.keys(assign).forEach(k=>delete assign[k]);
+    Object.assign(assign, s.assign);
+    SLOTS.forEach(k=>{
+      state[k].repeat = s.sliders[k].repeat;
+      state[k].rotDeg = s.sliders[k].rotDeg;
+      state[k].repEl.value = state[k].repeat;
+      state[k].rotEl.value = state[k].rotDeg;
+      state[k].repv.textContent = state[k].repeat;
+      state[k].rotv.textContent = state[k].rotDeg;
+      applyParamsToTexture(k);
+    });
+    applyAssignments();
+    saveSlidersToStorage();
+    msg('履歴から復元しました');
+  };
+  shotsBox.prepend(img);
+  while(shotsBox.children.length>MAX_SHOTS) shotsBox.removeChild(shotsBox.lastChild);
+  lastShotSig = sig;
 }
 
-/* UI */
-$('resetCam').addEventListener('click', ()=>{ if(model) fit(model); else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }});
-$('shot').addEventListener('click', ()=>{ renderer.render(scene,camera); const a=document.createElement('a'); a.download=`fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`; a.href=renderer.domElement.toDataURL('image/png'); a.click(); });
-function loadTexFor(key, file){
-  state[key].url=URL.createObjectURL(file);
-  state[key].tex=texLoader.load(state[key].url, ()=>{ prepTexture(state[key].tex); applyParamsToTexture(key); applyAssignments(); updateBubblePreviews(); msg(`生地${key}を読み込みました`); });
-}
-SLOTS.forEach(k=>{ $('tex'+k).addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor(k,f); }); });
-function clearTexture(key){ const s=state[key]; s.tex=null; s.url=''; s.fileEl.value=''; updateBubblePreviews(); lastOpWasNone=true; applyAssignments(); msg(`生地${key}をクリアしました`); }
-SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
-SLOTS.forEach(k=>{
-  state[k].repEl.addEventListener('input', ()=>{ state[k].repeat=Number(state[k].repEl.value); applyParamsToTexture(k); saveSlidersToStorage(); });
-  state[k].rotEl.addEventListener('input', ()=>{ state[k].rotDeg=Number(state[k].rotEl.value); applyParamsToTexture(k); saveSlidersToStorage(); });
+/* UI: カメラ / 画像読込 / PNG保存 */
+$('resetCam').addEventListener('click', ()=>{
+  if(model) fit(model);
+  else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
 });
+$('shot').addEventListener('click', ()=>{
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.download = `fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});
+
+function loadTexFor(key, file){
+  state[key].url = URL.createObjectURL(file);
+  state[key].tex = texLoader.load(state[key].url, ()=>{
+    prepTexture(state[key].tex); applyParamsToTexture(key); applyAssignments();
+    updateBubblePreviews(); msg(`生地${key}を読み込みました`);
+  });
+}
+SLOTS.forEach(k=>{
+  $('tex'+k).addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor(k,f); });
+});
+
+/* クリア（画像のみ外す） */
+function clearTexture(key){
+  const s = state[key];
+  s.tex = null; s.url=''; s.fileEl.value = '';
+  updateBubblePreviews();
+  lastOpWasNone = true;   // 『なし』扱い：この直後の自動スクショを抑止
+  applyAssignments();
+  msg(`生地${key}をクリアしました`);
+}
+SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
+
+/* スライダー変更（保存 & 即反映） */
+SLOTS.forEach(k=>{
+  state[k].repEl.addEventListener('input', ()=>{
+    state[k].repeat = Number(state[k].repEl.value);
+    applyParamsToTexture(k);
+    saveSlidersToStorage();
+  });
+  state[k].rotEl.addEventListener('input', ()=>{
+    state[k].rotDeg = Number(state[k].rotEl.value);
+    applyParamsToTexture(k);
+    saveSlidersToStorage();
+  });
+});
+
+/* 初期：スライダー復元 */
 loadSlidersFromStorage();
 
-/* クリック選択/吹き出し（裏面無効） */
-const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
-let pick=null, overlay=null, pickMatIndex=null;
-const bubble=$('bubble'); const chipEls={A:$('pickA'),B:$('pickB'),C:$('pickC'),D:$('pickD'),E:$('pickE'),None:$('pickNone')};
-function updateBubblePreviews(){ SLOTS.forEach(k=>{ const el=chipEls[k]; if(!el) return; el.style.backgroundImage=state[k].url?`url(${state[k].url})`:'none'; el.textContent=state[k].url?'':k; }); }
+/* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let pick = null;               // 現在選択中の Mesh
+let overlay = null;            // 赤ハイライト用
+let pickMatIndex = null;       // クリック面の materialIndex
+const bubble = $('bubble');
+const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), D:$('pickD'), E:$('pickE'), None:$('pickNone') };
+
+function updateBubblePreviews(){
+  SLOTS.forEach(k=>{
+    const el = chipEls[k];
+    if(!el) return;
+    el.style.backgroundImage = state[k].url ? `url(${state[k].url})` : 'none';
+    el.textContent = state[k].url ? '' : k;
+  });
+}
 updateBubblePreviews();
-function showHighlight(mesh){ hideHighlight(); if(!mesh||!mesh.geometry) return; const mat=new THREE.MeshBasicMaterial({color:0xff6b81,transparent:true,opacity:0.35,depthTest:false,depthWrite:false}); overlay=new THREE.Mesh(mesh.geometry,mat); overlay.renderOrder=9999; mesh.add(overlay); }
-function hideHighlight(){ if(overlay&&overlay.parent){ overlay.parent.remove(overlay);} overlay=null; }
+
+function showHighlight(mesh){
+  hideHighlight();
+  if(!mesh || !mesh.geometry) return;
+  const mat = new THREE.MeshBasicMaterial({
+    color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false
+  });
+  overlay = new THREE.Mesh(mesh.geometry, mat);
+  overlay.renderOrder = 9999;
+  mesh.add(overlay);
+}
+function hideHighlight(){ if(overlay && overlay.parent){ overlay.parent.remove(overlay); } overlay = null; }
 function hideBubble(){ bubble.style.display='none'; }
-function setBubbleScreenPos(world){ const p=world.clone().project(camera); const x=(p.x*.5+.5)*canvas.clientWidth; const y=(-p.y*.5+.5)*canvas.clientHeight; bubble.style.left=`${x}px`; bubble.style.top=`${y}px`; }
-const _nm=new THREE.Matrix3();
-function isFrontFacing(hit){ if(!hit.face||!hit.object) return true; const n=hit.face.normal.clone().applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize(); const camDir=camera.position.clone().sub(hit.point).normalize(); return n.dot(camDir)>0.15; }
+
+function setBubbleScreenPos(world){
+  const p = world.clone().project(camera);
+  const x = (p.x * .5 + .5) * canvas.clientWidth;
+  const y = ( -p.y * .5 + .5) * canvas.clientHeight;
+  bubble.style.left = `${x}px`;
+  bubble.style.top  = `${y}px`;
+}
+
+/* 裏面クリック無効 */
+const _nm = new THREE.Matrix3();
+function isFrontFacing(hit){
+  if(!hit.face || !hit.object) return true;
+  const n = hit.face.normal.clone().applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize();
+  const camDir = camera.position.clone().sub(hit.point).normalize();
+  return n.dot(camDir) > 0.15;
+}
+
 function onCanvasClick(ev){
-  const r=canvas.getBoundingClientRect(); mouse.x=((ev.clientX-r.left)/r.width)*2-1; mouse.y=-((ev.clientY-r.top)/r.height)*2+1; ray.setFromCamera(mouse,camera);
-  const targets=[]; scene.traverse(o=>{ if(o.isMesh) targets.push(o); }); const hits=ray.intersectObjects(targets,true); const hit=hits.find(h=>h.object&&h.object.material&&isFrontFacing(h));
+  const r = canvas.getBoundingClientRect();
+  mouse.x = ((ev.clientX - r.left)/r.width) * 2 - 1;
+  mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
+  ray.setFromCamera(mouse, camera);
+
+  const targets = []; scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
+  const hits = ray.intersectObjects(targets, true);
+  const hit = hits.find(h => h.object && h.object.material && isFrontFacing(h));
+
   if(!hit){ pick=null; pickMatIndex=null; hideHighlight(); hideBubble(); return; }
-  pick=hit.object; pickMatIndex=(Array.isArray(pick.material)&&hit.face&&typeof hit.face.materialIndex==='number')?hit.face.materialIndex:null;
-  showHighlight(pick); const wp=hit.point.clone().add(new THREE.Vector3(0,0.02,0)); setBubbleScreenPos(wp); bubble.style.display='block'; controls.update();
+
+  pick = hit.object;
+  pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number') ? hit.face.materialIndex : null;
+  showHighlight(pick);
+
+  const wp = hit.point.clone().add(new THREE.Vector3(0, 0.02, 0));
+  setBubbleScreenPos(wp);
+  bubble.style.display='block';
+  controls.update();
 }
 canvas.addEventListener('pointerdown', onCanvasClick);
+
+/* 同じMaterialを共有していたらクローンして専有化 */
 function ensureUniqueMaterialOnMesh(mesh, idx){
   if(Array.isArray(mesh.material)){
-    const old=mesh.material[idx]; if(!old) return null; const count=materialUseCount.get(old.uuid)||0;
-    if(count>1){ const clone=old.clone(); mesh.material[idx]=clone; materialUseCount.set(old.uuid,count-1); materialUseCount.set(clone.uuid,1); if(isSupportedMat(clone)) targetMats.push(clone); return clone; }
+    const old = mesh.material[idx]; if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone(); mesh.material[idx] = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone);
+      return clone;
+    }
     return old;
   }else{
-    const old=mesh.material; if(!old) return null; const count=materialUseCount.get(old.uuid)||0;
-    if(count>1){ const clone=old.clone(); mesh.material=clone; materialUseCount.set(old.uuid,count-1); materialUseCount.set(clone.uuid,1); if(isSupportedMat(clone)) targetMats.push(clone); return clone; }
+    const old = mesh.material; if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone(); mesh.material = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone);
+      return clone;
+    }
     return old;
   }
 }
-function assignToSelected(key){
-  if(!pick||!pick.material) return;
-  let mat=null; if(Array.isArray(pick.material)){ const idx=(pickMatIndex!=null)?pickMatIndex:0; mat=ensureUniqueMaterialOnMesh(pick,idx);} else { mat=ensureUniqueMaterialOnMesh(pick,0); }
-  if(!mat) return; assign[mat.uuid]=key; lastOpWasNone=(key==='—'); applyAssignments();
-}
-chipEls.A.onclick=()=>assignToSelected('A'); chipEls.B.onclick=()=>assignToSelected('B'); chipEls.C.onclick=()=>assignToSelected('C'); chipEls.D.onclick=()=>assignToSelected('D'); chipEls.E.onclick=()=>assignToSelected('E'); chipEls.None.onclick=()=>assignToSelected('—');
 
-/* パネル開閉 */
-const uiWrap=$('uiWrap'), uiToggle=$('uiToggle');
-function setCollapsed(v){ uiWrap.classList.toggle('collapsed',v); uiToggle.textContent=v?'›':'‹'; localStorage.setItem(LS_KEYS.ui, v?'1':'0'); }
+/* 吹き出し → 割り当て（クリック面のサブマテリアルのみ） */
+function assignToSelected(key){
+  if(!pick || !pick.material) return;
+  let mat = null;
+  if(Array.isArray(pick.material)){
+    const idx = (pickMatIndex!=null) ? pickMatIndex : 0;
+    mat = ensureUniqueMaterialOnMesh(pick, idx);
+  }else{
+    mat = ensureUniqueMaterialOnMesh(pick, 0);
+  }
+  if(!mat) return;
+
+  assign[mat.uuid] = key;
+  lastOpWasNone = (key === '—');     // 『なし』はこの操作だけスクショ抑止
+  applyAssignments();                // 中で自動スクショ判定
+}
+chipEls.A.onclick   = ()=>assignToSelected('A');
+chipEls.B.onclick   = ()=>assignToSelected('B');
+chipEls.C.onclick   = ()=>assignToSelected('C');
+chipEls.D.onclick   = ()=>assignToSelected('D');
+chipEls.E.onclick   = ()=>assignToSelected('E');
+chipEls.None.onclick= ()=>assignToSelected('—');
+
+/* パネル開閉（保存つき） */
+const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
+function setCollapsed(v){
+  uiWrap.classList.toggle('collapsed', v);
+  uiToggle.textContent = v ? '›' : '‹';
+  localStorage.setItem(LS_KEYS.ui, v ? '1' : '0');
+}
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
 setCollapsed(localStorage.getItem(LS_KEYS.ui)==='1');
 
 /* ループ */
-function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight; if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
-function loop(){ resize(); controls.update(); renderer.render(scene,camera); if(pick&&bubble.style.display!=='none'){ const center=new THREE.Box3().setFromObject(pick).getCenter(new THREE.Vector3()); setBubbleScreenPos(center);} requestAnimationFrame(loop); } loop();
+function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); } }
+function loop(){
+  resize(); controls.update(); renderer.render(scene,camera);
+  if(pick && bubble.style.display!=='none'){
+    const center = new THREE.Box3().setFromObject(pick).getCenter(new THREE.Vector3());
+    setBubbleScreenPos(center);
+  }
+  requestAnimationFrame(loop);
+} loop();
 
 /* メッセージ */
-let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,3000); }
+let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
 
 /* 表示リセット */
 $('resetAll').addEventListener('click', ()=>{
   Object.keys(assign).forEach(k=>assign[k]='—');
-  SLOTS.forEach(k=>{ const s=state[k]; s.repeat=3; s.rotDeg=0; s.repEl.value=3; s.rotEl.value=0; s.repv.textContent='3'; s.rotv.textContent='0'; });
-  targetMats.forEach(m=>{ if(m){ m.map=null; if(m.color) m.color.set(0xffffff); m.needsUpdate=true; } });
-  saveSlidersToStorage(); saveAssignToStorage(); msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
+  SLOTS.forEach(k=>{
+    const s = state[k];
+    s.repeat = 3; s.rotDeg = 0;
+    s.repEl.value = 3; s.rotEl.value = 0;
+    s.repv.textContent = '3'; s.rotv.textContent = '0';
+  });
+  targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
+  saveSlidersToStorage(); saveAssignToStorage();
+  msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
 });
 </script>
 </body></html>
