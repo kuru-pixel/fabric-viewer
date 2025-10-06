@@ -48,6 +48,29 @@
     background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;
   }
   #shots img:hover{ outline:2px solid #fff9 }
+
+  
+  /* === ビューワーモード用 === */
+.viewer #ui .block { display: none; }         /* 詳細スライダー群を隠す */
+.viewer #simpleTray { display: grid !important; }
+
+#simpleTray {
+  display:none;
+  grid-template-columns: repeat(auto-fill,minmax(100px,1fr));
+  gap:8px; margin-top:8px;
+}
+.simpleCard {
+  border:1px solid #ffffff33;border-radius:10px;padding:8px;text-align:center;
+  cursor:pointer;background:#111c;color:#fff;
+}
+.simpleCard .ph {
+  width:100%;aspect-ratio:1/1;border-radius:8px;background:#222 center/cover no-repeat;
+  border:1px solid #ffffff22;
+}
+.simpleActions{display:flex;gap:8px;margin-top:8px}
+.simpleActions button{flex:1}
+
+  
 </style>
 </head><body>
 
@@ -60,6 +83,7 @@
       <button id="resetCam">カメラリセット</button>
       <button id="resetAll" title="倍率/回転を初期化・割り当てを全て『なし』・見た目を白に戻す">リセット</button>
       <button id="shot" title="今の画面をPNG保存">スクショPNG</button>
+      <button id="viewMode" title="お客さん向けに簡単表示">👀 ビューワーモード</button>
       <small id="matinfo" style="margin-left:auto;"></small>
     </div>
 
@@ -122,6 +146,19 @@
   </div>
 
   <button id="uiToggle" aria-label="toggle panel">‹</button>
+  
+  <div id="simpleTray">
+  <div class="simpleCard" data-slot="A"><div class="ph" id="phA"></div><div>A</div></div>
+  <div class="simpleCard" data-slot="B"><div class="ph" id="phB"></div><div>B</div></div>
+  <div class="simpleCard" data-slot="C"><div class="ph" id="phC"></div><div>C</div></div>
+  <div class="simpleCard" data-slot="D"><div class="ph" id="phD"></div><div>D</div></div>
+  <div class="simpleCard" data-slot="E"><div class="ph" id="phE"></div><div>E</div></div>
+  <div class="simpleActions" style="grid-column:1/-1">
+    <button id="applyAll" title="割当済みのパーツすべてを同じスロットに">全適用</button>
+    <button id="resetLite">白に戻す</button>
+  </div>
+</div>
+
 </div>
 
 <!-- 右上：履歴サムネ -->
@@ -140,7 +177,8 @@
   </div>
 </div>
 
-<div id="footer">ドラッグで回転 / ホイールでズーム / 右ドラッグで移動</div>
+<div id="footer">ドラッグで回転 / ホイールでズーム</div>
+
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
 
@@ -485,6 +523,59 @@ function updateBubblePreviews(){
   });
 }
 updateBubblePreviews();
+
+
+  
+// ===== ビューワーモード =====
+const viewBtn = $('viewMode');
+const tray = $('simpleTray');
+const phEls = {A:$('phA'),B:$('phB'),C:$('phC'),D:$('phD'),E:$('phE')};
+
+function refreshSimpleThumbs(){
+  ['A','B','C','D','E'].forEach(k=>{
+    const url = state[k].url;
+    phEls[k].style.backgroundImage = url ? `url(${url})` : 'none';
+    phEls[k].style.backgroundColor = url ? '#111' : '#222';
+  });
+}
+refreshSimpleThumbs();
+
+viewBtn.addEventListener('click', ()=>{
+  document.body.classList.toggle('viewer');   // 詳細UIを隠してサムネ中心に
+  refreshSimpleThumbs();
+});
+
+// 大きいサムネをクリック → 現在選択中パーツに割り当て
+tray.addEventListener('click',(e)=>{
+  const card = e.target.closest('.simpleCard');
+  if(!card) return;
+  const k = card.dataset.slot;
+  if(!pick){ msg('先に衣服のパーツをクリックして選択してください'); return; }
+  assignToSelected(k);   // 既存関数をそのまま利用
+});
+
+// 全適用／白に戻す（簡易）
+$('applyAll').addEventListener('click', ()=>{
+  // いま選んでいるスロット（どれでも良いので1つ）を全マテリアルへ
+  const k = Object.values(assign).find(v=>v && v!=='—') || 'A';
+  targetMats.forEach(m=>assign[m.uuid]=k);
+  applyAssignments();
+  msg(`すべてのパーツを生地${k}にしました`);
+});
+$('resetLite').addEventListener('click', ()=>{
+  targetMats.forEach(m=>{ if(m){ m.map=null; if(m.color) m.color.set(0xffffff); }});
+  Object.keys(assign).forEach(x=>assign[x]='—');
+  applyAssignments();
+  msg('白に戻しました');
+});
+
+// 既存のサムネ更新にフックして簡易サムネも更新
+const _origUpdateBubblePreviews = updateBubblePreviews;
+updateBubblePreviews = function(){
+  _origUpdateBubblePreviews();
+  refreshSimpleThumbs();
+};
+
 
 function showHighlight(mesh){
   hideHighlight();
