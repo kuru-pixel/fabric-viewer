@@ -164,6 +164,11 @@ const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
+// ★中央固定のため：パンを禁止（右ドラッグ・二本指の平行移動を無効）
+controls.enablePan = false;
+// ★ズームがカーソル位置へ寄らないように（バージョンによって存在しない場合もあるので安全に）
+if ('zoomToCursor' in controls) controls.zoomToCursor = false;
+
 
 /* モデル */
 let model, targetMats = [];
