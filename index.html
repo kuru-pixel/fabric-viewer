@@ -4,7 +4,7 @@
 <title>Fabric Viewer</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui;
-            background:#fff; /* ←追加 */
+            background: radial-gradient(1200px 800px at 60% 40%, #ffffff 0%, #eef1f5 60%, #dde2ea 100%);
   }
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 
@@ -220,14 +220,34 @@ const SLOTS = ['A','B','C','D','E'];
 
 /* three.js */
 const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // 影を柔らかく
 if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+const scene = new THREE.Scene(); scene.background = null;  // 背景はCSSのグラデに任せる
 const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
 const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
+
+// 主光源の影を有効化
+dir.castShadow = true;
+dir.shadow.mapSize.set(1024,1024);
+dir.shadow.camera.near = 0.1;
+dir.shadow.camera.far  = 20;
+
+// 柔らかい補助光（左奥から）
+const fill = new THREE.DirectionalLight(0xffffff, 0.45);
+fill.position.set(-3, 2.5, -2);
+scene.add(fill);
+
+// 背面のリムライト（輪郭を少し浮かせる）
+const rim = new THREE.DirectionalLight(0xffffff, 0.35);
+rim.position.set(0, 3, -4);
+scene.add(rim);
+
+  
 // ★中央固定のため：パンを禁止（右ドラッグ・二本指の平行移動を無効）
 controls.enablePan = false;
 // ★ズームがカーソル位置へ寄らないように（バージョンによって存在しない場合もあるので安全に）
@@ -255,6 +275,8 @@ loader.load(
     // 従来処理
     model = glb.scene;
     scene.add(model);
+    enableShadows(model);
+    addGroundUnder(model);
     analyze(model);
     fit(model);
     msg('garment.glb を読み込みました');
@@ -274,6 +296,8 @@ loader.load(
     const cube = new THREE.Mesh(g, m);
     scene.add(cube);
     targetMats = [cube.material];
+    enableShadows(cube);
+    addGroundUnder(cube);
     updateMatInfo();
     applyAutoUVScaleIfFirst(cube);
     loadAssignFromStorage();
@@ -281,6 +305,33 @@ loader.load(
     msg('assets/garment.glb が無い/読めないのでキューブ表示');
   }
 );
+
+// ----- 影用ユーティリティ -----
+function enableShadows(root){
+  root.traverse(o=>{
+    if(o.isMesh){
+      o.castShadow = true;      // 服は影を落とす
+      o.receiveShadow = false;  // 服自体は受け影しない（厚みモデルだと不自然になりやすい）
+    }
+  });
+}
+
+let ground;   // 受け影用の床
+function addGroundUnder(root){
+  if(ground && ground.parent) ground.parent.remove(ground);
+
+  const box = new THREE.Box3().setFromObject(root);
+  const minY = box.min.y;
+
+  const g = new THREE.PlaneGeometry(20, 20);
+  const m = new THREE.ShadowMaterial({ opacity: 0.25 }); // 影だけ見せる透明材
+  ground = new THREE.Mesh(g, m);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.set(0, minY - 0.002, 0);  // ほんの少し下に
+  ground.receiveShadow = true;
+  ground.userData.ground = true;  // ← レイキャスト対象から除外する印
+  scene.add(ground);
+}
 
 
 /* ===== ユーティリティ ===== */
@@ -639,7 +690,7 @@ function onCanvasClick(ev){
   mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
   ray.setFromCamera(mouse, camera);
 
-  const targets = []; scene.traverse(o=>{ if(o.isMesh) targets.push(o); });
+  const targets = []; scene.traverse(o=>{ if(o.isMesh && !o.userData?.ground) targets.push(o); });
   const hits = ray.intersectObjects(targets, true);
   const hit = hits.find(h => h.object && h.object.material && isFrontFacing(h));
 
