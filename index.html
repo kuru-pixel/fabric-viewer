@@ -10,7 +10,17 @@
 
   /* ==== 左パネル（開閉スライド） ==== */
   #uiWrap{position:fixed;z-index:5;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
-  #ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:420px}
+  /*#ui{background:#0b0b0bcc;color:#fff;padding:12px;border-radius:10px;max-width:420px}*/
+  #ui{
+  background:rgba(20,20,22,.55);
+  color:#fff;
+  padding:14px;
+  border-radius:16px;
+  max-width:420px;
+  border:1px solid rgba(255,255,255,.16);
+  backdrop-filter: blur(10px) saturate(120%);
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
   #ui label{display:block;font-size:12px;margin:6px 0 4px}
   #ui input[type="range"]{width:220px}
   .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
@@ -93,6 +103,15 @@
   box-shadow:0 2px 10px #0008; z-index:9999; cursor:pointer; display:none;
 }
 body.panel-collapsed #reopen{ display:block; }
+
+/* ほんのりビネット（四隅がすこし落ちる） */
+body::after{
+  content:"";
+  position:fixed; inset:0; pointer-events:none;
+  background: radial-gradient(1200px 800px at 60% 40%, rgba(0,0,0,0) 55%, rgba(0,0,0,.06) 100%);
+  mix-blend-mode:multiply;
+}
+
 
   
 </style>
@@ -223,16 +242,23 @@ const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // 影を柔らかく
+  
+// まぶしさを抑える（白衣が飛びにくく）
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9; // 0.85〜1.0で好み調整
+
 if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene(); scene.background = null;  // 背景はCSSのグラデに任せる
 const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
 scene.add(camera);  // ← カメラをシーン階層に入れる（この後ライトをぶら下げるため）
-scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
+scene.add(new THREE.HemisphereLight(0xffffff,0x223,0.45)); // 少し弱める
+
 
 // 常に「画面の右上」から当たるライト（カメラ基準）
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+const dir = new THREE.DirectionalLight(0xfff2e0, 0.85); // ほんのり暖色＆少し弱め
+
 dir.castShadow = true; // 影を使っているなら有効のままでOK（未使用ならあっても害なし）
 
 // カメラ座標で右上前方（1,1,1）方向から当てる
@@ -252,6 +278,8 @@ dir.castShadow = true;
 dir.shadow.mapSize.set(1024,1024);
 dir.shadow.camera.near = 0.1;
 dir.shadow.camera.far  = 20;
+dir.shadow.bias = -0.0005;  // 影の黒スジ軽減
+
 
 // 柔らかい補助光（左奥から）
 const fill = new THREE.DirectionalLight(0xffffff, 0.45);
@@ -623,6 +651,9 @@ updateBubblePreviews();
 const viewBtn = $('viewMode');
 const tray = $('simpleTray');
 const phEls = {A:$('phA'),B:$('phB'),C:$('phC'),D:$('phD'),E:$('phE')};
+  // ページを開いた時は簡易ビューで（必要なら👀ボタンで切替）
+document.body.classList.add('viewer');
+
 
 function refreshSimpleThumbs(){
   ['A','B','C','D','E'].forEach(k=>{
