@@ -228,8 +228,24 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene(); scene.background = null;  // 背景はCSSのグラデに任せる
 const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(camera);  // ← カメラをシーン階層に入れる（この後ライトをぶら下げるため）
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
-const dir = new THREE.DirectionalLight(0xffffff,1.0); dir.position.set(2,2,4); scene.add(dir);
+
+// 常に「画面の右上」から当たるライト（カメラ基準）
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+dir.castShadow = true; // 影を使っているなら有効のままでOK（未使用ならあっても害なし）
+
+// カメラ座標で右上前方（1,1,1）方向から当てる
+dir.position.set(1, 1, 1).multiplyScalar(10);
+
+// ライトの向き（target）もカメラの正面を見るように固定
+const camAim = new THREE.Object3D();
+camAim.position.set(0, 0, -1);  // カメラの「前」
+camera.add(camAim);
+dir.target = camAim;
+
+// ライトをカメラの子にする → カメラが回転・移動しても、画面右上から当たり続ける
+camera.add(dir);
 
 // 主光源の影を有効化
 dir.castShadow = true;
