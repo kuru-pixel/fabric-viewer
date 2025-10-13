@@ -85,6 +85,15 @@
 .simpleActions{display:flex;gap:8px;margin-top:8px}
 .simpleActions button{flex:1}
 
+/* パネル再表示用の浮遊ボタン（畳んだ時だけ出る） */
+#reopen{
+  position:fixed; left:8px; top:50%; transform:translateY(-50%);
+  width:40px; height:64px; border:none; border-radius:10px;
+  background:#e23; color:#fff; font-size:22px; line-height:64px; text-align:center;
+  box-shadow:0 2px 10px #0008; z-index:9999; cursor:pointer; display:none;
+}
+body.panel-collapsed #reopen{ display:block; }
+
   
 </style>
 </head><body>
@@ -175,6 +184,8 @@
 </div>
 
 </div>
+
+<button id="reopen" aria-label="open panel">›</button>
 
 <!-- 右上：履歴サムネ -->
 <div id="shots"></div>
@@ -698,9 +709,11 @@ const uiWrap = $('uiWrap'), uiToggle = $('uiToggle');
 function setCollapsed(v){
   uiWrap.classList.toggle('collapsed', v);
   uiToggle.textContent = v ? '›' : '‹';
+  document.body.classList.toggle('panel-collapsed', v);   // ★追加：ボディに状態を持たせる
   localStorage.setItem(LS_KEYS.ui, v ? '1' : '0');
 }
 uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
+$('reopen').addEventListener('click', ()=> setCollapsed(false));
 setCollapsed(localStorage.getItem(LS_KEYS.ui)==='1');
 
 /* ループ */
