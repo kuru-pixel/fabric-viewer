@@ -3,7 +3,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Fabric Viewer</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
+  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui;
+            background:#fff; /* ←追加 */
+  }
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 
   /* ==== 左パネル（開閉スライド） ==== */
@@ -15,17 +17,21 @@
   .mini{margin-left:6px;font-size:12px;padding:2px 6px}
 
   #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;
-    background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006}
-  #uiWrap.collapsed{transform:translateX(-100%)}
+  background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006;
+  position:absolute; top:50%; transform:translateY(-50%);}
+
+  #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
 
 #uiWrap.collapsed #uiToggle{
+  position: fixed;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
   width: 40px; height: 64px;   /* クリックしやすく */
   font-size: 22px;
-  background:#e23; color:#fff;
   border-radius: 10px;
 }
-
-
   
   .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
   .block h4{margin:0 0 4px 0;font-size:13px}
@@ -206,7 +212,7 @@ const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
 if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x141414);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
 const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
 const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
 scene.add(new THREE.HemisphereLight(0xffffff,0x223,1.0));
