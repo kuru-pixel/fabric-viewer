@@ -137,8 +137,6 @@ body::after{
         <label style="margin:0"><input id="texA" type="file" accept="image/*"></label>
         <button id="clearA" class="mini" type="button">クリアA</button>
       </div>
-      <label>タイル倍率A <input id="repeatA" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvA">3</span></label>
-      <label>回転A（度） <input id="rotA" type="range" min="0" max="180" step="1" value="0"> <span id="rotvA">0</span></label>
     </div>
 
     <!-- B -->
@@ -148,8 +146,6 @@ body::after{
         <label style="margin:0"><input id="texB" type="file" accept="image/*"></label>
         <button id="clearB" class="mini" type="button">クリアB</button>
       </div>
-      <label>タイル倍率B <input id="repeatB" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvB">3</span></label>
-      <label>回転B（度） <input id="rotB" type="range" min="0" max="180" step="1" value="0"> <span id="rotvB">0</span></label>
     </div>
 
     <!-- C -->
@@ -159,8 +155,6 @@ body::after{
         <label style="margin:0"><input id="texC" type="file" accept="image/*"></label>
         <button id="clearC" class="mini" type="button">クリアC</button>
       </div>
-      <label>タイル倍率C <input id="repeatC" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvC">3</span></label>
-      <label>回転C（度） <input id="rotC" type="range" min="0" max="180" step="1" value="0"> <span id="rotvC">0</span></label>
     </div>
 
     <!-- D -->
@@ -170,8 +164,6 @@ body::after{
         <label style="margin:0"><input id="texD" type="file" accept="image/*"></label>
         <button id="clearD" class="mini" type="button">クリアD</button>
       </div>
-      <label>タイル倍率D <input id="repeatD" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvD">3</span></label>
-      <label>回転D（度） <input id="rotD" type="range" min="0" max="180" step="1" value="0"> <span id="rotvD">0</span></label>
     </div>
 
     <!-- E -->
@@ -181,8 +173,6 @@ body::after{
         <label style="margin:0"><input id="texE" type="file" accept="image/*"></label>
         <button id="clearE" class="mini" type="button">クリアE</button>
       </div>
-      <label>タイル倍率E <input id="repeatE" type="range" min="1" max="12" step="0.5" value="3"> <span id="repvE">3</span></label>
-      <label>回転E（度） <input id="rotE" type="range" min="0" max="180" step="1" value="0"> <span id="rotvE">0</span></label>
     </div>
 
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>
@@ -324,7 +314,6 @@ loader.load(
     analyze(model);
     fit(model);
     msg('garment.glb を読み込みました');
-    applyAutoUVScaleIfFirst(model);
     loadAssignFromStorage();
     applyAssignments();
   },
@@ -343,7 +332,6 @@ loader.load(
     enableShadows(cube);
     addGroundUnder(cube);
     updateMatInfo();
-    applyAutoUVScaleIfFirst(cube);
     loadAssignFromStorage();
     applyAssignments();
     msg('assets/garment.glb が無い/読めないのでキューブ表示');
@@ -416,37 +404,16 @@ function fit(obj){
 /* ===== A〜E の状態 & 永続化 ===== */
 const texLoader = new THREE.TextureLoader();
 const state = {
-  A:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatA'), rotEl:$('rotA'), repv:$('repvA'), rotv:$('rotvA'), fileEl:$('texA') },
-  B:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatB'), rotEl:$('rotB'), repv:$('repvB'), rotv:$('rotvB'), fileEl:$('texB') },
-  C:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatC'), rotEl:$('rotC'), repv:$('repvC'), rotv:$('rotvC'), fileEl:$('texC') },
-  D:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatD'), rotEl:$('rotD'), repv:$('repvD'), rotv:$('rotvD'), fileEl:$('texD') },
-  E:{ tex:null, url:'', repeat:3, rotDeg:0, repEl:$('repeatE'), rotEl:$('rotE'), repv:$('repvE'), rotv:$('rotvE'), fileEl:$('texE') },
+  A:{ tex:null, url:'', fileEl:$('texA') },
+  B:{ tex:null, url:'', fileEl:$('texB') },
+  C:{ tex:null, url:'', fileEl:$('texC') },
+  D:{ tex:null, url:'', fileEl:$('texD') },
+  E:{ tex:null, url:'', fileEl:$('texE') },
 };
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
 
-const LS_KEYS = { sliders:'fv_sliders_v1', assign:'fv_assign_v1', ui:'uiCollapsed' };
+const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
 
-function saveSlidersToStorage(){
-  const data = {};
-  SLOTS.forEach(k=>{ data[k] = {repeat: state[k].repeat, rotDeg: state[k].rotDeg}; });
-  try{ localStorage.setItem(LS_KEYS.sliders, JSON.stringify(data)); }catch(e){}
-}
-function loadSlidersFromStorage(){
-  try{
-    const raw = localStorage.getItem(LS_KEYS.sliders);
-    if(!raw) return false;
-    const data = JSON.parse(raw);
-    let applied = false;
-    SLOTS.forEach(k=>{
-      if(data[k]){
-        const rep = Number(data[k].repeat); const rot = Number(data[k].rotDeg);
-        if(Number.isFinite(rep)){ state[k].repeat = rep; state[k].repEl.value = rep; state[k].repv.textContent = rep; applied = true; }
-        if(Number.isFinite(rot)){ state[k].rotDeg = rot; state[k].rotEl.value = rot; state[k].rotv.textContent = rot; applied = true; }
-      }
-    });
-    return applied;
-  }catch(e){ return false; }
-}
 function saveAssignToStorage(){ try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){} }
 function loadAssignFromStorage(){
   try{
@@ -457,21 +424,6 @@ function loadAssignFromStorage(){
   }catch(e){}
 }
 
-/* 自動UVスケール推定（初回のみ） */
-function applyAutoUVScaleIfFirst(rootObj){
-  const had = localStorage.getItem(LS_KEYS.sliders);
-  if(had) return;
-  const box = new THREE.Box3().setFromObject(rootObj);
-  const size = box.getSize(new THREE.Vector3());
-  const L = Math.sqrt(size.x * size.y);
-  let r = L * 2.0;
-  r = Math.max(1, Math.min(12, Math.round(r*2)/2));
-  SLOTS.forEach(k=>{
-    state[k].repeat = r; state[k].repEl.value = r; state[k].repv.textContent = r;
-  });
-  saveSlidersToStorage();
-}
-
 /* テクスチャ前処理＆適用 */
 function prepTexture(t){
   if(!t) return;
@@ -479,17 +431,10 @@ function prepTexture(t){
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
-function applyParamsToTexture(key){
-  const s = state[key]; const t = s.tex; if(!t) return;
-  s.repv.textContent = s.repeat; s.rotv.textContent = s.rotDeg;
-  t.repeat.set(parseFloat(s.repeat), parseFloat(s.repeat));
-  t.rotation = parseFloat(s.rotDeg) * Math.PI/180;
-  t.center.set(0.5,0.5); t.needsUpdate = true;
-  targetMats.forEach(m=>{ if(m.map===t) m.needsUpdate=true; });
-}
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid]; let tex = (key && state[key]) ? state[key].tex : null;
+    const key = assign[m.uuid];
+    const tex = (key && state[key]) ? state[key].tex : null;
     if(isSupportedMat(m)){
       if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
       else { m.map = tex; }
@@ -498,9 +443,8 @@ function applyAssignments(){
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
-  SLOTS.forEach(applyParamsToTexture);
   saveAssignToStorage();
-  debounceMaybeCapture();  // ← 割り当て後に自動スクショ判定
+  debounceMaybeCapture();
 }
 
 /* ====== スクショ履歴 ====== */
@@ -513,12 +457,10 @@ let lastOpWasNone = false;
 
 // 今の画面状態の署名（割当+スライダー）
 function currentSignature(){
-  const pairs = targetMats.map(m=>{
+  return targetMats.map(m=>{
     const k = assign[m.uuid];
     return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
   }).join('|');
-  const sliders = SLOTS.map(k=>`${k}:${state[k].repeat},${state[k].rotDeg}`).join('|');
-  return pairs+'#'+sliders;
 }
 
 // ★全部の対象マテリアルが「A〜Eのどれかに割り当て済み」かつ「そのスロットに画像がある」かを判定
@@ -547,26 +489,13 @@ function captureShot(sig){
   const img = new Image();
   img.src = dataUrl;
   img.title = 'クリックで復元';
-  const snap = {
-    assign: {...assign},
-    sliders: Object.fromEntries(SLOTS.map(k=>[k,{repeat:state[k].repeat, rotDeg:state[k].rotDeg}]))
-  };
+  const snap = { assign: {...assign} }; // ← sliders は持たない
   img.dataset.snap = JSON.stringify(snap);
   img.onclick = ()=>{
     const s = JSON.parse(img.dataset.snap);
     Object.keys(assign).forEach(k=>delete assign[k]);
     Object.assign(assign, s.assign);
-    SLOTS.forEach(k=>{
-      state[k].repeat = s.sliders[k].repeat;
-      state[k].rotDeg = s.sliders[k].rotDeg;
-      state[k].repEl.value = state[k].repeat;
-      state[k].rotEl.value = state[k].rotDeg;
-      state[k].repv.textContent = state[k].repeat;
-      state[k].rotv.textContent = state[k].rotDeg;
-      applyParamsToTexture(k);
-    });
     applyAssignments();
-    saveSlidersToStorage();
     msg('履歴から復元しました');
   };
   shotsBox.prepend(img);
@@ -590,7 +519,7 @@ $('shot').addEventListener('click', ()=>{
 function loadTexFor(key, file){
   state[key].url = URL.createObjectURL(file);
   state[key].tex = texLoader.load(state[key].url, ()=>{
-    prepTexture(state[key].tex); applyParamsToTexture(key); applyAssignments();
+    prepTexture(state[key].tex); applyAssignments();
     updateBubblePreviews(); msg(`生地${key}を読み込みました`);
   });
 }
@@ -608,23 +537,6 @@ function clearTexture(key){
   msg(`生地${key}をクリアしました`);
 }
 SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
-
-/* スライダー変更（保存 & 即反映） */
-SLOTS.forEach(k=>{
-  state[k].repEl.addEventListener('input', ()=>{
-    state[k].repeat = Number(state[k].repEl.value);
-    applyParamsToTexture(k);
-    saveSlidersToStorage();
-  });
-  state[k].rotEl.addEventListener('input', ()=>{
-    state[k].rotDeg = Number(state[k].rotEl.value);
-    applyParamsToTexture(k);
-    saveSlidersToStorage();
-  });
-});
-
-/* 初期：スライダー復元 */
-loadSlidersFromStorage();
 
 /* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
 const ray = new THREE.Raycaster();
@@ -832,15 +744,12 @@ let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; cl
 /* 表示リセット */
 $('resetAll').addEventListener('click', ()=>{
   Object.keys(assign).forEach(k=>assign[k]='—');
-  SLOTS.forEach(k=>{
-    const s = state[k];
-    s.repeat = 3; s.rotDeg = 0;
-    s.repEl.value = 3; s.rotEl.value = 0;
-    s.repv.textContent = '3'; s.rotv.textContent = '0';
+  targetMats.forEach(m=>{
+    if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; }
   });
-  targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
-  saveSlidersToStorage(); saveAssignToStorage();
-  msg('表示を初期化しました（白・倍率3・回転0・割り当てなし）');
+  saveAssignToStorage();
+  msg('表示を初期化しました（白・割り当てなし）');
 });
+
 </script>
 </body></html>
