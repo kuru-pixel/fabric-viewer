@@ -1,2 +1,9 @@
-*.glb filter=lfs diff=lfs merge=lfs -text
-*.ktx2 filter=lfs diff=lfs merge=lfs -text
+# ---- LFS: 原版だけ（配信用は除外） ----
+# モデルの原版（巨大GLB等）
+assets/raw_models/** filter=lfs diff=lfs merge=lfs -text
+
+# テクスチャの原版（psd / 大きいpng等）
+assets/raw_textures/** filter=lfs diff=lfs merge=lfs -text
+
+# 例：作業用動画も原版フォルダならLFS
+assets/raw_videos/** filter=lfs diff=lfs merge=lfs -text
