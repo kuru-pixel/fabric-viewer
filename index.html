@@ -114,8 +114,87 @@ body::after{
 
 
   
+
+
+/* ===== 型選択UI ===== */
+body.selecting #uiWrap,
+body.selecting #reopen,
+body.selecting #shots,
+body.selecting #bubble,
+body.selecting #footer,
+body.selecting #msg,
+body.selecting canvas#c { display:none !important; }
+
+#patternSelect{
+  position:fixed; inset:0; z-index:20; display:grid; place-items:center;
+  /* 背景は既存のグラデが見えるので透明 */
+}
+#patternSelect .wrap{
+  width:min(1100px, 92vw);
+}
+#patternSelect h1{
+  margin:0 0 18px; font-weight:700; letter-spacing:.02em;
+  font-size:clamp(20px, 3.2vw, 32px);
+  color:#222a; text-align:center;
+}
+#patternGrid{
+  display:grid; gap:14px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.patternCard{
+  display:flex; flex-direction:column; gap:8px;
+  padding:12px; border-radius:14px;
+  background:#fff8; border:1px solid #0001; backdrop-filter:blur(8px);
+  box-shadow:0 6px 18px rgba(0,0,0,.12);
+  cursor:pointer; transition:transform .08s ease, box-shadow .2s ease;
+}
+.patternCard:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
+.patternCard .name{ font-weight:700; color:#222; }
+.patternCard .thumb{
+  aspect-ratio: 4/3; border-radius:10px; border:1px dashed #0002;
+  background:#f6f7fa center/contain no-repeat;
+}
+.patternCard.disabled{ opacity:.45; cursor:not-allowed; }
+.patternCard.disabled .thumb{ background:#f6f7fa; border-style:solid; }
+
+
+
+  
+  
 </style>
 </head><body>
+
+
+
+<div id="patternSelect">
+  <div class="wrap">
+    <h1>どの服を作製しますか？</h1>
+    <div id="patternGrid">
+      <button class="patternCard disabled" data-id="RI-1">
+        <div class="name">RI-1</div>
+        <div class="thumb"></div>
+      </button>
+      <button class="patternCard disabled" data-id="RI-2">
+        <div class="name">RI-2</div>
+        <div class="thumb"></div>
+      </button>
+      <button class="patternCard" data-id="RI-3">
+        <div class="name">RI-3</div>
+        <div class="thumb" id="thumb-RI3"></div>
+      </button>
+      <button class="patternCard disabled" data-id="RI-4">
+        <div class="name">RI-4</div>
+        <div class="thumb"></div>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
 
 <!-- ===== 左パネル ===== -->
 <div id="uiWrap">
@@ -223,9 +302,18 @@ body::after{
 
 <script>
 /* ========= 基本 ========= */
-const GLB_PATH = './assets/garment.glb';
+let GLB_PATH = null; // ← 選択後にセットする
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C','D','E'];
+
+// 型ごとの定義（必要に応じてパスを差し替え）
+const PATTERNS = {
+  'RI-1': null,
+  'RI-2': null,
+  'RI-3': { glb: './assets/garment.glb', thumb: './assets/thumbs/RI-3.png' },
+  'RI-4': null
+};
+
 
 /* three.js */
 const canvas = $('c');
@@ -291,32 +379,50 @@ if ('zoomToCursor' in controls) controls.zoomToCursor = false;
 /* モデル */
 let model, targetMats = [];
 const loader = new THREE.GLTFLoader();
-loader.load(
-  GLB_PATH,
-  (glb) => {
-    // ★ ここから追加：GLBが使っている拡張＆画像の種別をログに出す
-    const json = glb.parser?.json || {};
-    const used = json.extensionsUsed || [];
-    const images = (json.images || []).map((im, i) => ({
-      i,
-      mime: im.mimeType || '(unknown)',
-      uri: im.uri ? im.uri : '(embedded bufferView)',
-    }));
-    console.log('[GLB INFO] extensionsUsed:', used);
-    console.table(images);
-    window.__glbinfo = { used, images };  // コンソールから再参照できるように
+/* モデルを読む関数（選択後に呼ぶ） */
+function loadModel(path){
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    path,
+    (glb) => {
+      const json = glb.parser?.json || {};
+      const used = json.extensionsUsed || [];
+      const images = (json.images || []).map((im, i) => ({
+        i, mime: im.mimeType || '(unknown)', uri: im.uri ? im.uri : '(embedded bufferView)',
+      }));
+      console.log('[GLB INFO] extensionsUsed:', used);
+      console.table(images);
+      window.__glbinfo = { used, images };
 
-    // 従来処理
-    model = glb.scene;
-    scene.add(model);
-    enableShadows(model);
-    addGroundUnder(model);
-    analyze(model);
-    fit(model);
-    msg('garment.glb を読み込みました');
-    loadAssignFromStorage();
-    applyAssignments();
-  },
+      model = glb.scene;
+      scene.add(model);
+      enableShadows(model);
+      addGroundUnder(model);
+      analyze(model);
+      fit(model);
+      msg('garment.glb を読み込みました');
+      loadAssignFromStorage();
+      applyAssignments();
+    },
+    undefined,
+    (err) => {
+      console.error('GLB load failed:', err);
+      msg('GLB読み込みエラー： ' + (err?.message || err));
+      const g = new THREE.BoxGeometry(1, 1.2, 0.5);
+      const m = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.1, roughness: 0.7 });
+      const cube = new THREE.Mesh(g, m);
+      scene.add(cube);
+      targetMats = [cube.material];
+      enableShadows(cube);
+      addGroundUnder(cube);
+      updateMatInfo();
+      loadAssignFromStorage();
+      applyAssignments();
+      msg('assets/garment.glb が無い/読めないのでキューブ表示');
+    }
+  );
+}
+
   undefined,
   (err) => {
     // ★ ここを少し強化：エラーの中身をはっきり表示
@@ -558,6 +664,34 @@ function updateBubblePreviews(){
 updateBubblePreviews();
 
 
+
+/* ===== 型選択 初期化 ===== */
+document.body.classList.add('selecting'); // 最初は選択画面
+
+// RI-3の2Dサムネ（あるなら差し替え）
+const ri3 = PATTERNS['RI-3'];
+if (ri3?.thumb) { const el = $('thumb-RI3'); if (el) el.style.backgroundImage = `url(${ri3.thumb})`; }
+
+// カードクリック
+document.getElementById('patternGrid').addEventListener('click', (e)=>{
+  const card = e.target.closest('.patternCard'); if(!card) return;
+  const id = card.dataset.id;
+  const def = PATTERNS[id];
+
+  if (!def) { msg(`${id} は準備中です`); return; }
+
+  // 選択 → ビューアへ
+  GLB_PATH = def.glb;
+  document.body.classList.remove('selecting');
+  loadModel(GLB_PATH);
+});
+
+
+  
+
+
+
+  
   
 // ===== ビューワーモード =====
 const viewBtn = $('viewMode');
