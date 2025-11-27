@@ -165,6 +165,22 @@ let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C','D','E'];
 
+// ===== BASE から渡ってきた生地IDを読む =====
+const params = new URLSearchParams(window.location.search);
+const fabricsParam = params.get('fabrics');
+const initialFabricsFromBase = fabricsParam
+  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3)
+  : [];
+
+// ID → 画像パス の対応表（必要に応じて増やす）
+const FABRIC_IMAGES = {
+  'S-100': './assets/fabrics/S-100.jpg',
+  'S-101': './assets/fabrics/S-101.jpg',
+  'S-102': './assets/fabrics/S-102.jpg',
+  'S-103': './assets/fabrics/S-103.jpg'
+  // ここに S-104 以降もどんどん足していく
+};
+  
 // 型ごとの定義
 const PATTERNS = {
   'RI-1': null,
@@ -308,6 +324,18 @@ const state = {
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'D'|'E'|'—'
 const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
 
+// URL から生地テクスチャを読み込んでスロットにセット
+function loadTexFromUrlFor(key, url){
+  if (!state[key]) return;
+  state[key].url = url;
+  state[key].tex = texLoader.load(url, ()=>{
+    prepTexture(state[key].tex);
+    applyAssignments();
+    updateBubblePreviews();
+    msg(`生地${key}（URL）を読み込みました`);
+  });
+}
+
 function saveAssignToStorage(){ try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){} }
 function loadAssignFromStorage(){
   try{
@@ -413,6 +441,22 @@ function loadTexFor(key, file){
 SLOTS.forEach(k=>{
   $('tex'+k).addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor(k,f); });
 });
+// ===== BASE から渡された生地IDを A/B/C に自動セット =====
+(function initFromBase(){
+  if (!initialFabricsFromBase.length) return;
+
+  const slotOrder = ['A','B','C']; // とりあえず3枚まで
+  console.log('BASE から渡ってきた生地ID:', initialFabricsFromBase);
+
+  initialFabricsFromBase.forEach((id, idx)=>{
+    const slot = slotOrder[idx];
+    const url  = FABRIC_IMAGES[id];
+    if (!slot || !url) return; // 対応表に無いIDはスキップ
+
+    loadTexFromUrlFor(slot, url);
+  });
+})();
+
 function clearTexture(key){
   const s = state[key]; s.tex = null; s.url=''; s.fileEl.value = '';
   updateBubblePreviews(); lastOpWasNone = true; applyAssignments();
