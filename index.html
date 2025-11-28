@@ -69,7 +69,11 @@
   body.selecting #msg,
   body.selecting canvas#c { display:none !important; }
 
-  #patternSelect{position:fixed; inset:0; z-index:20; display:grid; place-items:center;}
+  #patternSelect{position:fixed; inset:0; z-index:20; display:none; place-items:center;}
+  /* selecting クラスが付いているときだけ表示 */
+body.selecting #patternSelect{
+  display:grid;
+}
   #patternSelect .wrap{width:min(1100px, 92vw);}
   #patternSelect h1{margin:0 0 18px; font-weight:700; letter-spacing:.02em;font-size:clamp(20px, 3.2vw, 32px); color:#222a; text-align:center;}
   #patternGrid{display:grid; gap:14px; grid-template-columns: repeat(4, 1fr);}
