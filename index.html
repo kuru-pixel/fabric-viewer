@@ -113,8 +113,6 @@
     <div class="block"><h4>生地A</h4><div class="btnRow"><label style="margin:0"><input id="texA" type="file" accept="image/*"></label><button id="clearA" class="mini" type="button">クリアA</button></div></div>
     <div class="block"><h4>生地B</h4><div class="btnRow"><label style="margin:0"><input id="texB" type="file" accept="image/*"></label><button id="clearB" class="mini" type="button">クリアB</button></div></div>
     <div class="block"><h4>生地C</h4><div class="btnRow"><label style="margin:0"><input id="texC" type="file" accept="image/*"></label><button id="clearC" class="mini" type="button">クリアC</button></div></div>
-    <div class="block"><h4>生地D</h4><div class="btnRow"><label style="margin:0"><input id="texD" type="file" accept="image/*"></label><button id="clearD" class="mini" type="button">クリアD</button></div></div>
-    <div class="block"><h4>生地E</h4><div class="btnRow"><label style="margin:0"><input id="texE" type="file" accept="image/*"></label><button id="clearE" class="mini" type="button">クリアE</button></div></div>
 
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>
   </div>
@@ -146,8 +144,6 @@
     <button class="chip" id="pickA">A</button>
     <button class="chip" id="pickB">B</button>
     <button class="chip" id="pickC">C</button>
-    <button class="chip" id="pickD">D</button>
-    <button class="chip" id="pickE">E</button>
     <button class="chip none" id="pickNone">なし</button>
   </div>
 </div>
@@ -468,7 +464,7 @@ const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let pick = null, overlay = null, pickMatIndex = null;
 const bubble = $('bubble');
-const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), D:$('pickD'), E:$('pickE'), None:$('pickNone') };
+const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') };
 
 function updateBubblePreviews(){
   SLOTS.forEach(k=>{
