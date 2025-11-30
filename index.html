@@ -106,12 +106,9 @@ body.selecting #patternSelect{
   <div id="ui">
     <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
     <div class="btnRow">
-      <button id="resetCam">カメラリセット</button>
       <button id="resetAll" title="割当を全て『なし』・白に戻す">リセット</button>
-      <button id="shot" title="今の画面をPNG保存">スクショPNG</button>
-      <button id="viewMode" title="お客さん向けに簡単表示">👀 ビューワーモード</button>
-      <small id="matinfo" style="margin-left:auto;"></small>
     </div>
+
 
     <!-- A〜E（倍率/回転は削除済み） -->
     <div class="block"><h4>生地A</h4><div class="btnRow"><label style="margin:0"><input id="texA" type="file" accept="image/*"></label><button id="clearA" class="mini" type="button">クリアA</button></div></div>
@@ -298,7 +295,10 @@ function analyze(root){
   targetMats = Array.from(mats).filter(isSupportedMat);
   updateMatInfo();
 }
-function updateMatInfo(){ $('matinfo').textContent = `適用対象: ${targetMats.length} material(s)`; }
+function updateMatInfo(){
+  const el = $('matinfo');
+  if (el) el.textContent = `適用対象: ${targetMats.length} material(s)`;
+}
 function fit(obj){
   const box=new THREE.Box3().setFromObject(obj),
         size=box.getSize(new THREE.Vector3()).length(),
@@ -430,7 +430,7 @@ function captureShot(sig){
   lastShotSig = sig;
 }
 
-/* UI: カメラ / 画像読込 / PNG保存 */
+/* UI: カメラ / 画像読込 / PNG保存 
 $('resetCam').addEventListener('click', ()=>{
   if(model) fit(model);
   else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
@@ -441,7 +441,7 @@ $('shot').addEventListener('click', ()=>{
   a.download = `fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
   a.href = renderer.domElement.toDataURL('image/png');
   a.click();
-});
+});*/
 
 function loadTexFor(key, file){
   state[key].url = URL.createObjectURL(file);
