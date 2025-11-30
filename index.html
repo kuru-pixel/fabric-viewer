@@ -111,9 +111,31 @@ body.selecting #patternSelect{
 
 
     <!-- A〜E（倍率/回転は削除済み） -->
-    <div class="block"><h4>生地A</h4><div class="btnRow"><label style="margin:0"><input id="texA" type="file" accept="image/*"></label><button id="clearA" class="mini" type="button">クリアA</button></div></div>
-    <div class="block"><h4>生地B</h4><div class="btnRow"><label style="margin:0"><input id="texB" type="file" accept="image/*"></label><button id="clearB" class="mini" type="button">クリアB</button></div></div>
-    <div class="block"><h4>生地C</h4><div class="btnRow"><label style="margin:0"><input id="texC" type="file" accept="image/*"></label><button id="clearC" class="mini" type="button">クリアC</button></div></div>
+<div class="block">
+  <h4>生地A</h4>
+  <div class="btnRow">
+    <!-- ここが生地選択ページに飛ぶボタンになる -->
+    <button id="changeA" type="button">生地を変更</button>
+    <button id="clearA" class="mini" type="button">クリアA</button>
+  </div>
+</div>
+
+<div class="block">
+  <h4>生地B</h4>
+  <div class="btnRow">
+    <button id="changeB" type="button">生地を変更</button>
+    <button id="clearB" class="mini" type="button">クリアB</button>
+  </div>
+</div>
+
+<div class="block">
+  <h4>生地C</h4>
+  <div class="btnRow">
+    <button id="changeC" type="button">生地を変更</button>
+    <button id="clearC" class="mini" type="button">クリアC</button>
+  </div>
+</div>
+
 
     <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>
   </div>
@@ -160,14 +182,26 @@ let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C'];
 
-// ===== BASE から渡ってきた生地IDを読む =====
+// ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
-const fabricsParam = params.get('fabrics');
+const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
+const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
 
-const initialFabricsFromBase = fabricsParam
+// URL から渡ってきた A/B/C の生地ID
+const initialFabrics = fabricsParam
   ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3)
   : [];
 
+// A/B/C 各スロットに今どの生地IDが入っているか
+const slotFabricIds = {
+  A: initialFabrics[0] || null,
+  B: initialFabrics[1] || null,
+  C: initialFabrics[2] || null,
+};
+
+// いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
+let currentPatternId = patternParam;
+  
 // ID → 画像パスを自動で組み立てる
 const FABRIC_EXT = '.jpg';
 function fabricIdToUrl(id) {
@@ -309,12 +343,11 @@ function fit(obj){
   camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
 }
 
-/* ===== A〜E の状態 & 永続化 ===== */
 const texLoader = new THREE.TextureLoader();
 const state = {
-  A:{ tex:null, url:'', fileEl:$('texA') },
-  B:{ tex:null, url:'', fileEl:$('texB') },
-  C:{ tex:null, url:'', fileEl:$('texC') },
+  A:{ tex:null, url:'' },
+  B:{ tex:null, url:'' },
+  C:{ tex:null, url:'' },
 };
 
 // ===== URLから生地画像を読み込む =====
@@ -330,17 +363,19 @@ function loadTexFromUrlFor(key, url){
   });
 }
 
-// ===== BASE から渡された生地を A/B/C に自動セット =====
+// ===== URLから渡された生地を A/B/C に自動セット =====
 (function initFromBase(){
-  if (!initialFabricsFromBase.length) return;
+  if (!initialFabrics.length) return;
 
   const slotOrder = ['A','B','C'];
-  console.log('BASEから渡ってきた生地ID:', initialFabricsFromBase);
+  console.log('BASEから渡ってきた生地ID:', initialFabrics);
 
-  initialFabricsFromBase.forEach((id, idx)=>{
+  initialFabrics.forEach((id, idx)=>{
     const slot = slotOrder[idx];
     if (!slot) return;
+
     const url = fabricIdToUrl(id);
+    slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
     loadTexFromUrlFor(slot, url);
   });
 })();
@@ -450,16 +485,52 @@ function loadTexFor(key, file){
     updateBubblePreviews(); msg(`生地${key}を読み込みました`);
   });
 }
-SLOTS.forEach(k=>{
-  $('tex'+k).addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) loadTexFor(k,f); });
-});
 
+// 生地選択ページの URL（★ あなたの CUSTOM ORDER のURLに変える）
+const FABRIC_SELECT_URL = 'https://developers.thebase.com/themes/preview';
+
+function goToFabricSelect(slot){
+  // A/B/C で何番目か
+  const order = ['A','B','C'];
+  const idx = order.indexOf(slot);
+
+  // いま使っている生地IDの一覧（nullは除外）
+  const currentList = order
+    .map(s => slotFabricIds[s])
+    .filter(Boolean);
+
+  const params = new URLSearchParams();
+  params.set('slot', slot);                // どのスロットを変更するか（'A' / 'B' / 'C'）
+  params.set('pattern', currentPatternId); // いま見ている型（RI-3 など）
+
+  if (currentList.length){
+    params.set('fabrics', currentList.join(',')); // 例: "S-100,S-101,S-102"
+  }
+
+  // もし「いまのAは選び直しOK、それ以外はグレーアウト」にしたい場合は
+  // index も渡しておくと生地選択側で使える
+  if (idx >= 0) params.set('slotIndex', idx.toString());
+
+  // 生地選択ページへ移動
+  location.href = `${FABRIC_SELECT_URL}?${params.toString()}`;
+}
+
+  
 function clearTexture(key){
-  const s = state[key]; s.tex = null; s.url=''; s.fileEl.value = '';
-  updateBubblePreviews(); lastOpWasNone = true; applyAssignments();
+  const s = state[key];
+  s.tex = null;
+  s.url = '';
+  updateBubblePreviews();
+  lastOpWasNone = true;
+  applyAssignments();
   msg(`生地${key}をクリアしました`);
 }
+
 SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
+
+$('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
+$('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
+$('changeC').addEventListener('click', ()=> goToFabricSelect('C'));
 
 /* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
 const ray = new THREE.Raycaster();
@@ -595,6 +666,7 @@ $('resetAll').addEventListener('click', ()=>{
 (function initPatternSelect(){
   const ri3 = PATTERNS['RI-3'];
   const thumbEl = $('thumb-RI3');
+  
   if (ri3?.thumb && thumbEl){
     const img = new Image();
     img.onload = ()=> { thumbEl.style.backgroundImage = `url(${ri3.thumb})`; };
@@ -603,11 +675,13 @@ $('resetAll').addEventListener('click', ()=>{
   }
   $('patternGrid').addEventListener('click', (e)=>{
     const card = e.target.closest('.patternCard'); if(!card) return;
-    const id = card.dataset.id; const def = PATTERNS[id];
+    const id = card.dataset.id;       // "RI-3" とか
+    const def = PATTERNS[id];
     if (!def){ msg(`${id} は準備中です`); return; }
     GLB_PATH = def.glb;
-    document.body.classList.remove('selecting'); // 型選択を閉じる
-    loadModel(GLB_PATH);                          // 3D読み込み
+    currentPatternId = id;            // ここで覚える！
+    document.body.classList.remove('selecting');
+    loadModel(GLB_PATH);
   });
 })();
 
