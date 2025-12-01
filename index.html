@@ -528,17 +528,6 @@ function logMaterialsForZoneSetup() {
   console.log('上の uuid を見ながら MAT_ZONE に Z1/Z2/Z3 を割り当ててください。');
 }
 
-// 3つのゾーンに対する 6通りのパターン（A/B/C の入れ替え）
-const PRESETS = [
-  { id:'p1', name:'A-B-C', zoneToSlot:{ Z1:'A', Z2:'B', Z3:'C' } },
-  { id:'p2', name:'A-C-B', zoneToSlot:{ Z1:'A', Z2:'C', Z3:'B' } },
-  { id:'p3', name:'B-A-C', zoneToSlot:{ Z1:'B', Z2:'A', Z3:'C' } },
-  { id:'p4', name:'B-C-A', zoneToSlot:{ Z1:'B', Z2:'C', Z3:'A' } },
-  { id:'p5', name:'C-A-B', zoneToSlot:{ Z1:'C', Z2:'A', Z3:'B' } },
-  { id:'p6', name:'C-B-A', zoneToSlot:{ Z1:'C', Z2:'B', Z3:'A' } },
-];
-
-
 // ===== URLから生地画像を読み込む =====
 function loadTexFromUrlFor(key, url){
   if (!state[key]) return;
@@ -602,51 +591,6 @@ function applyAssignments(){
   });
   saveAssignToStorage();
   debounceMaybeCapture();
-}
-
-
-// ===== プリセット適用 =====
-function applyPreset(preset) {
-  // いったん今の assign を全クリア
-  Object.keys(assign).forEach(k => delete assign[k]);
-
-  targetMats.forEach(m => {
-    const zone = MAT_ZONE[m.uuid];      // このマテリアルがどのゾーンか
-    if (!zone) {
-      // ゾーン未指定 → 今は「生地なし」にしておく
-      assign[m.uuid] = '—';
-      return;
-    }
-    const slot = preset.zoneToSlot[zone];   // そのゾーンに割り当てる生地(A/B/C)
-    assign[m.uuid] = slot || '—';
-  });
-
-  applyAssignments();
-  msg(`プリセット「${preset.name}」を適用しました`);
-}
-
-// ===== プリセットのボタンを作る =====
-const presetsEl = document.getElementById('presets');
-let activePresetIndex = -1;
-
-function setActivePreset(idx){
-  activePresetIndex = idx;
-  Array.from(presetsEl.children).forEach((el, i)=>{
-    el.classList.toggle('active', i === idx);
-  });
-}
-
-function initPresetButtons(){
-  PRESETS.forEach((p, idx)=>{
-    const btn = document.createElement('button');
-    btn.className = 'presetCard';
-    btn.textContent = `パターン${idx+1}\n(${p.name})`;
-    btn.addEventListener('click', ()=>{
-      applyPreset(p);
-      setActivePreset(idx);
-    });
-    presetsEl.appendChild(btn);
-  });
 }
 
 // モデル読み込み後に呼び出したいので、loadModel 成功時に実行する
@@ -874,7 +818,7 @@ chipEls.C.onclick=()=>assignToSelected('C');
 chipEls.None.onclick=()=>assignToSelected('—');
 
 
-// ===== 6パターン自動切替 =====
+// ===== 6パターン自動切替（ZONES × A/B/C） =====
 
 // ゾーン1/2/3 に対して A/B/C をどう当てるか
 const PATTERN_PERMS = [
@@ -902,34 +846,48 @@ function applyPatternByIndex(index) {
 
   // ゾーン1 → perm.Z1 の生地
   (ZONES.Z1 || []).forEach(uuid => {
-    assign[uuid] = perm.Z1;
+    assign[uuid] = perm.Z1 || '—';
   });
   // ゾーン2 → perm.Z2 の生地
   (ZONES.Z2 || []).forEach(uuid => {
-    assign[uuid] = perm.Z2;
+    assign[uuid] = perm.Z2 || '—';
   });
   // ゾーン3 → perm.Z3 の生地
   (ZONES.Z3 || []).forEach(uuid => {
-    assign[uuid] = perm.Z3;
+    assign[uuid] = perm.Z3 || '—';
   });
 
   applyAssignments();
   msg(perm.label + ' を適用しました');
 }
 
-/**
- * 下に並べたパターンボタンにイベントを付ける
- * 例: <button class="patternBtn" data-pattern="0">パターン1 (A-B-C)</button>
- */
-function initPatternButtons() {
-  const btns = document.querySelectorAll('.patternBtn');
-  btns.forEach(btn => {
-    const i = Number(btn.dataset.pattern || '0');
-    btn.addEventListener('click', () => applyPatternByIndex(i));
+// ===== 下部のカードを実際に作る =====
+const presetsEl = document.getElementById('presets');
+let activePresetIndex = -1;
+
+function setActivePreset(idx){
+  activePresetIndex = idx;
+  Array.from(presetsEl.children).forEach((el, i)=>{
+    el.classList.toggle('active', i === idx);
   });
 }
 
-initPatternButtons();
+function initPresetButtons(){
+  // 一旦クリア
+  presetsEl.innerHTML = '';
+
+  PATTERN_PERMS.forEach((p, idx)=>{
+    const btn = document.createElement('button');
+    btn.className = 'presetCard';
+    btn.textContent = p.label;   // 「パターン1 (A-B-C)」など
+    btn.addEventListener('click', ()=>{
+      applyPatternByIndex(idx);
+      setActivePreset(idx);
+    });
+    presetsEl.appendChild(btn);
+  });
+}
+
 
 
 /* ループ */
