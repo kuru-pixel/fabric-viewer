@@ -101,6 +101,44 @@ body.selecting #patternSelect{
   .patternCard .thumb{aspect-ratio: 4/3; border-radius:10px; border:1px dashed #0002; background:#f6f7fa center/contain no-repeat;}
   .patternCard.disabled{ opacity:.45; cursor:not-allowed; }
   .patternCard.disabled .thumb{ background:#f6f7fa; border-style:solid; }
+
+
+
+
+    /* ==== 下部 プリセットパターン ==== */
+  #presets{
+    position:fixed;
+    left:50%;
+    bottom:20px;
+    transform:translateX(-50%);
+    display:flex;
+    gap:12px;
+    z-index:5;
+  }
+  .presetCard{
+    width:120px;
+    height:80px;
+    border-radius:10px;
+    border:1px solid #0002;
+    background:#000c;
+    cursor:pointer;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    color:#fff;
+    font-size:12px;
+    padding-bottom:6px;
+    opacity:.7;
+  }
+  .presetCard.active{
+    outline:2px solid #fff;
+    opacity:1;
+  }
+
+
+
+
+  
 </style>
 </head>
 <body class="selecting">
@@ -172,6 +210,8 @@ body.selecting #patternSelect{
     <button class="chip none" id="pickNone">なし</button>
   </div>
 </div>
+
+<div id="presets"></div>
 
 <div id="footer">ドラッグで回転 / ホイールでズーム</div>
 <div id="backHomeBtn">← ホームへ戻る</div>
@@ -273,6 +313,8 @@ function loadModel(path){
       msg('garment.glb を読み込みました');
       loadAssignFromStorage();
       applyAssignments();
+      // ★プリセットボタンを初期化（最初の1回だけでよければガードしてもOK）
+      initPresetButtons();
     },
     undefined,
     (err) => {
@@ -333,6 +375,9 @@ function analyze(root){
   });
   targetMats = Array.from(mats).filter(isSupportedMat);
   updateMatInfo();
+    // ★初回セットアップ用：コンソールに material.uuid を出す
+  logMaterialsForZoneSetup();
+
 }
 function updateMatInfo(){
   const el = $('matinfo');
@@ -354,6 +399,30 @@ const state = {
   B:{ tex:null, url:'' },
   C:{ tex:null, url:'' },
 };
+
+// ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
+// key: material.uuid -> 'Z1' | 'Z2' | 'Z3'
+const MAT_ZONE = {};
+
+// コンソールで uuid を把握するためのヘルパ（あとで説明する）
+function logMaterialsForZoneSetup() {
+  console.log('--- material list for MAT_ZONE ---');
+  targetMats.forEach(m => {
+    console.log(m.name || '(no-name)', m.uuid);
+  });
+  console.log('上の uuid を見ながら MAT_ZONE に Z1/Z2/Z3 を割り当ててください。');
+}
+
+// 3つのゾーンに対する 6通りのパターン（A/B/C の入れ替え）
+const PRESETS = [
+  { id:'p1', name:'A-B-C', zoneToSlot:{ Z1:'A', Z2:'B', Z3:'C' } },
+  { id:'p2', name:'A-C-B', zoneToSlot:{ Z1:'A', Z2:'C', Z3:'B' } },
+  { id:'p3', name:'B-A-C', zoneToSlot:{ Z1:'B', Z2:'A', Z3:'C' } },
+  { id:'p4', name:'B-C-A', zoneToSlot:{ Z1:'B', Z2:'C', Z3:'A' } },
+  { id:'p5', name:'C-A-B', zoneToSlot:{ Z1:'C', Z2:'A', Z3:'B' } },
+  { id:'p6', name:'C-B-A', zoneToSlot:{ Z1:'C', Z2:'B', Z3:'A' } },
+];
+
 
 // ===== URLから生地画像を読み込む =====
 function loadTexFromUrlFor(key, url){
@@ -420,6 +489,57 @@ function applyAssignments(){
   debounceMaybeCapture();
 }
 
+
+// ===== プリセット適用 =====
+function applyPreset(preset) {
+  // いったん今の assign を全クリア
+  Object.keys(assign).forEach(k => delete assign[k]);
+
+  targetMats.forEach(m => {
+    const zone = MAT_ZONE[m.uuid];      // このマテリアルがどのゾーンか
+    if (!zone) {
+      // ゾーン未指定 → 今は「生地なし」にしておく
+      assign[m.uuid] = '—';
+      return;
+    }
+    const slot = preset.zoneToSlot[zone];   // そのゾーンに割り当てる生地(A/B/C)
+    assign[m.uuid] = slot || '—';
+  });
+
+  applyAssignments();
+  msg(`プリセット「${preset.name}」を適用しました`);
+}
+
+// ===== プリセットのボタンを作る =====
+const presetsEl = document.getElementById('presets');
+let activePresetIndex = -1;
+
+function setActivePreset(idx){
+  activePresetIndex = idx;
+  Array.from(presetsEl.children).forEach((el, i)=>{
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+function initPresetButtons(){
+  PRESETS.forEach((p, idx)=>{
+    const btn = document.createElement('button');
+    btn.className = 'presetCard';
+    btn.textContent = `パターン${idx+1}\n(${p.name})`;
+    btn.addEventListener('click', ()=>{
+      applyPreset(p);
+      setActivePreset(idx);
+    });
+    presetsEl.appendChild(btn);
+  });
+}
+
+// モデル読み込み後に呼び出したいので、loadModel 成功時に実行する
+
+
+
+
+  
 /* ====== スクショ履歴 ====== */
 const MAX_SHOTS = 6;
 const shotsBox = $('shots');
