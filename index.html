@@ -817,6 +817,14 @@ function assignToSelected(key){
     mat = ensureUniqueMaterialOnMesh(pick, 0);
   }
   if(!mat) return;
+
+    console.log(
+    '[ZONE SETUP]',
+    'material name:', mat.name || '(no-name)',
+    'uuid:', mat.uuid,
+    'assigned fabric:', key
+  );
+  
   assign[mat.uuid] = key;
   lastOpWasNone = (key === '—');
   applyAssignments();
