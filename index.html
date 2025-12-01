@@ -260,20 +260,31 @@ function saveZonesToStorage() {
  * （最初の一回だけ実行される）
  */
 function initZonesFromCurrentAssignOnce() {
-  if (zonesInitialized) return;           // もう済んでいたら何もしない
+  if (zonesInitialized) return;
   zonesInitialized = true;
 
-  // 既に保存済みならそれを使う
+  // まず localStorage から読んでみる
   if (loadZonesFromStorage()) {
-    console.log('ZONES 読み込み済み', ZONES);
-    return;
+    const z = ZONES || {};
+    const total =
+      (z.Z1 ? z.Z1.length : 0) +
+      (z.Z2 ? z.Z2.length : 0) +
+      (z.Z3 ? z.Z3.length : 0);
+
+    // 1つでもゾーンにパーツが入っていれば、そのまま使う
+    if (total > 0) {
+      console.log('ZONES 読み込み済み', ZONES);
+      return;
+    }
+    // ぜんぶ空 ＝ 初回に「何も割り当てられてない状態」で保存されたっぽいので作り直す
+    console.log('ZONES が空なので現在の割り当てから作り直します');
   }
 
-  // まだ無ければ「現在の assign 状態」から決める
+  // 現在の assign から ZONES を作成
   ZONES = { Z1: [], Z2: [], Z3: [] };
 
   targetMats.forEach(m => {
-    const k = assign[m.uuid];  // 'A' / 'B' / 'C' / '—' / undefined
+    const k = assign[m.uuid]; // 'A' / 'B' / 'C' / '—' / undefined
     if (k === 'A') {
       ZONES.Z1.push(m.uuid);
     } else if (k === 'B') {
@@ -286,6 +297,7 @@ function initZonesFromCurrentAssignOnce() {
   saveZonesToStorage();
   console.log('ZONES を現在の割り当てから作成しました', ZONES);
 }
+
 
 // ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
