@@ -158,11 +158,7 @@ body.selecting #patternSelect{
 
 
   <!--   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>  -->
-  </div>
 
-  <button id="uiToggle" aria-label="toggle panel">‹</button>
-
-  <div id="simpleTray">
     <div class="simpleCard" data-slot="A"><div class="ph" id="phA"></div><div>A</div></div>
     <div class="simpleCard" data-slot="B"><div class="ph" id="phB"></div><div>B</div></div>
     <div class="simpleCard" data-slot="C"><div class="ph" id="phC"></div><div>C</div></div>
@@ -173,7 +169,6 @@ body.selecting #patternSelect{
   </div>
 </div>
 
-<button id="reopen" aria-label="open panel">›</button>
 
 <!-- 右上：履歴サムネ -->
 <div id="shots"></div>
@@ -645,18 +640,6 @@ chipEls.A.onclick=()=>assignToSelected('A');
 chipEls.B.onclick=()=>assignToSelected('B');
 chipEls.C.onclick=()=>assignToSelected('C');
 chipEls.None.onclick=()=>assignToSelected('—');
-
-/* パネル開閉 */
-const uiWrap=$('uiWrap'), uiToggle=$('uiToggle');
-function setCollapsed(v){
-  uiWrap.classList.toggle('collapsed', v);
-  uiToggle.textContent = v ? '›' : '‹';
-  document.body.classList.toggle('panel-collapsed', v);
-  localStorage.setItem(LS_KEYS.ui, v ? '1' : '0');
-}
-uiToggle.addEventListener('click', ()=> setCollapsed(!uiWrap.classList.contains('collapsed')));
-$('reopen').addEventListener('click', ()=> setCollapsed(false));
-setCollapsed(localStorage.getItem(LS_KEYS.ui)==='1');
 
 /* ループ */
 function resize(){
