@@ -217,6 +217,17 @@ body.selecting #patternSelect{
 <div id="backHomeBtn">← ホームへ戻る</div>
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
+<div id="patternBar" style="
+  position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+  display:flex; gap:12px; z-index:9;
+">
+  <button class="patternBtn" data-pattern="0">パターン1 (A-B-C)</button>
+  <button class="patternBtn" data-pattern="1">パターン2 (A-C-B)</button>
+  <button class="patternBtn" data-pattern="2">パターン3 (B-A-C)</button>
+  <button class="patternBtn" data-pattern="3">パターン4 (B-C-A)</button>
+  <button class="patternBtn" data-pattern="4">パターン5 (C-A-B)</button>
+  <button class="patternBtn" data-pattern="5">パターン6 (C-B-A)</button>
+</div>
 
 <script src="./assets/threejs/three.min.js"></script>
 <script src="./assets/threejs/GLTFLoader.js"></script>
@@ -226,6 +237,65 @@ body.selecting #patternSelect{
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 const SLOTS = ['A','B','C'];
+
+// ===== ゾーン定義（ゾーン1/2/3 ← マテリアルuuidの集合） =====
+let ZONES = null;  // { Z1: [uuid,...], Z2: [...], Z3: [...] }
+const ZONE_LS_KEY = 'fv_zones_v1';
+let zonesInitialized = false;
+
+function loadZonesFromStorage() {
+  try {
+    const raw = localStorage.getItem(ZONE_LS_KEY);
+    if (!raw) return false;
+    ZONES = JSON.parse(raw);
+    return true;
+  } catch (e) {
+    console.warn('ゾーン情報の読み込み失敗', e);
+    return false;
+  }
+}
+
+function saveZonesToStorage() {
+  if (!ZONES) return;
+  try {
+    localStorage.setItem(ZONE_LS_KEY, JSON.stringify(ZONES));
+  } catch (e) {
+    console.warn('ゾーン情報の保存失敗', e);
+  }
+}
+
+/**
+ * 「今表示されている A/B/C の割り当て」から
+ * ゾーン1/2/3 を一度だけ決めて保存する。
+ * （最初の一回だけ実行される）
+ */
+function initZonesFromCurrentAssignOnce() {
+  if (zonesInitialized) return;           // もう済んでいたら何もしない
+  zonesInitialized = true;
+
+  // 既に保存済みならそれを使う
+  if (loadZonesFromStorage()) {
+    console.log('ZONES 読み込み済み', ZONES);
+    return;
+  }
+
+  // まだ無ければ「現在の assign 状態」から決める
+  ZONES = { Z1: [], Z2: [], Z3: [] };
+
+  targetMats.forEach(m => {
+    const k = assign[m.uuid];  // 'A' / 'B' / 'C' / '—' / undefined
+    if (k === 'A') {
+      ZONES.Z1.push(m.uuid);
+    } else if (k === 'B') {
+      ZONES.Z2.push(m.uuid);
+    } else if (k === 'C') {
+      ZONES.Z3.push(m.uuid);
+    }
+  });
+
+  saveZonesToStorage();
+  console.log('ZONES を現在の割り当てから作成しました', ZONES);
+}
 
 // ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
@@ -315,6 +385,9 @@ function loadModel(path){
       applyAssignments();
       // ★プリセットボタンを初期化（最初の1回だけでよければガードしてもOK）
       initPresetButtons();
+      // ★ A/B/C 割り当てを反映したあとに、ゾーン定義を一度だけ作成/読み込み
+      initZonesFromCurrentAssignOnce();
+
     },
     undefined,
     (err) => {
@@ -749,6 +822,66 @@ chipEls.A.onclick=()=>assignToSelected('A');
 chipEls.B.onclick=()=>assignToSelected('B');
 chipEls.C.onclick=()=>assignToSelected('C');
 chipEls.None.onclick=()=>assignToSelected('—');
+
+
+// ===== 6パターン自動切替 =====
+
+// ゾーン1/2/3 に対して A/B/C をどう当てるか
+const PATTERN_PERMS = [
+  { label: 'パターン1 (A-B-C)', Z1: 'A', Z2: 'B', Z3: 'C' },
+  { label: 'パターン2 (A-C-B)', Z1: 'A', Z2: 'C', Z3: 'B' },
+  { label: 'パターン3 (B-A-C)', Z1: 'B', Z2: 'A', Z3: 'C' },
+  { label: 'パターン4 (B-C-A)', Z1: 'B', Z2: 'C', Z3: 'A' },
+  { label: 'パターン5 (C-A-B)', Z1: 'C', Z2: 'A', Z3: 'B' },
+  { label: 'パターン6 (C-B-A)', Z1: 'C', Z2: 'B', Z3: 'A' },
+];
+
+/**
+ * 指定パターン番号 (0〜5) を適用
+ */
+function applyPatternByIndex(index) {
+  if (!ZONES) {
+    msg('ゾーン情報がまだ定義されていません');
+    return;
+  }
+  const perm = PATTERN_PERMS[index];
+  if (!perm) return;
+
+  // いったん assign をクリア
+  Object.keys(assign).forEach(k => { delete assign[k]; });
+
+  // ゾーン1 → perm.Z1 の生地
+  (ZONES.Z1 || []).forEach(uuid => {
+    assign[uuid] = perm.Z1;
+  });
+  // ゾーン2 → perm.Z2 の生地
+  (ZONES.Z2 || []).forEach(uuid => {
+    assign[uuid] = perm.Z2;
+  });
+  // ゾーン3 → perm.Z3 の生地
+  (ZONES.Z3 || []).forEach(uuid => {
+    assign[uuid] = perm.Z3;
+  });
+
+  applyAssignments();
+  msg(perm.label + ' を適用しました');
+}
+
+/**
+ * 下に並べたパターンボタンにイベントを付ける
+ * 例: <button class="patternBtn" data-pattern="0">パターン1 (A-B-C)</button>
+ */
+function initPatternButtons() {
+  const btns = document.querySelectorAll('.patternBtn');
+  btns.forEach(btn => {
+    const i = Number(btn.dataset.pattern || '0');
+    btn.addEventListener('click', () => applyPatternByIndex(i));
+  });
+}
+
+// DOM構築後に初期化
+document.addEventListener('DOMContentLoaded', initPatternButtons);
+
 
 /* ループ */
 function resize(){
