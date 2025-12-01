@@ -3,6 +3,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Fabric Viewer</title>
 <style>
+  /* パネル開閉の矢印ボタンは使わないので非表示にする */
+#uiToggle,
+#reopen {
+  display: none !important;
+}
+
   html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui;
             background: radial-gradient(1200px 800px at 60% 40%, #ffffff 0%, #eef1f5 60%, #dde2ea 100%);}
   canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
@@ -39,15 +45,6 @@
   #shots{position:fixed; z-index:8; top:10px; right:10px; display:flex; gap:8px; flex-direction:row-reverse; pointer-events:auto;}
   #shots img{width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid #ffffff55;background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;}
   #shots img:hover{ outline:2px solid #fff9 }
-
-  /* === ビューワーモード用 === */
-  .viewer #ui .block { display: none; }
-  .viewer #simpleTray { display: grid !important; }
-  #simpleTray{display:none;grid-template-columns: repeat(auto-fill,minmax(100px,1fr));gap:8px; margin-top:8px;}
-  .simpleCard{border:1px solid #ffffff33;border-radius:10px;padding:8px;text-align:center;cursor:pointer;background:#111c;color:#fff;}
-  .simpleCard .ph{width:100%;aspect-ratio:1/1;border-radius:8px;background:#222 center/cover no-repeat;border:1px solid #ffffff22;}
-  .simpleActions{display:flex;gap:8px;margin-top:8px}
-  .simpleActions button{flex:1}
 
   /* パネル再表示用ボタン */
   #reopen{position:fixed; left:8px; top:50%; transform:translateY(-50%);
@@ -158,14 +155,6 @@ body.selecting #patternSelect{
 
 
   <!--   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>  -->
-
-    <div class="simpleCard" data-slot="A"><div class="ph" id="phA"></div><div>A</div></div>
-    <div class="simpleCard" data-slot="B"><div class="ph" id="phB"></div><div>B</div></div>
-    <div class="simpleCard" data-slot="C"><div class="ph" id="phC"></div><div>C</div></div>
-    <div class="simpleActions" style="grid-column:1/-1">
-      <button id="applyAll">全適用</button>
-      <button id="resetLite">白に戻す</button>
-    </div>
   </div>
 </div>
 
