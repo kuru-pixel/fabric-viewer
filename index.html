@@ -487,7 +487,7 @@ function loadTexFor(key, file){
 }
 
 // 生地選択ページの URL（★ あなたの CUSTOM ORDER のURLに変える）
-const FABRIC_SELECT_URL = 'https://riistilo.base.shop/blog#custom-order';
+const FABRIC_SELECT_URL = 'https://riistilo.base.shop/blog';
 
 function goToFabricSelect(slot){
   // A/B/C で何番目か
@@ -512,7 +512,7 @@ function goToFabricSelect(slot){
   if (idx >= 0) params.set('slotIndex', idx.toString());
 
   // 生地選択ページへ移動
-  location.href = `${FABRIC_SELECT_URL}?${params.toString()}`;
+  location.href = `${FABRIC_SELECT_URL}?${params.toString()}#custom-order`;
 }
 
   
