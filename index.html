@@ -377,6 +377,7 @@ function loadModel(path){
       initPresetButtons();
       // ★ A/B/C 割り当てを反映したあとに、ゾーン定義を一度だけ作成/読み込み
       initZonesFromCurrentAssignOnce();
+      
 
     },
     undefined,
@@ -869,8 +870,7 @@ function initPatternButtons() {
   });
 }
 
-// DOM構築後に初期化
-document.addEventListener('DOMContentLoaded', initPatternButtons);
+initPatternButtons();
 
 
 /* ループ */
