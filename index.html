@@ -74,6 +74,26 @@
 body.selecting #patternSelect{
   display:grid;
 }
+  #backHomeBtn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s;
+}
+
+#backHomeBtn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
   #patternSelect .wrap{width:min(1100px, 92vw);}
   #patternSelect h1{margin:0 0 18px; font-weight:700; letter-spacing:.02em;font-size:clamp(20px, 3.2vw, 32px); color:#222a; text-align:center;}
   #patternGrid{display:grid; gap:14px; grid-template-columns: repeat(4, 1fr);}
@@ -170,6 +190,7 @@ body.selecting #patternSelect{
 </div>
 
 <div id="footer">ドラッグで回転 / ホイールでズーム</div>
+<div id="backHomeBtn">← ホームへ戻る</div>
 <div id="msg" hidden></div>
 <canvas id="c"></canvas>
 
@@ -709,5 +730,12 @@ function makeThumbFromGLB(glbPath, targetEl){
     r.dispose();
   }, undefined, ()=>{});
 }
+
+
+document.getElementById('backHomeBtn').addEventListener('click', function () {
+  window.location.href = 'https://riistilo.base.shop/';
+});
+
+  
 </script>
 </body></html>
