@@ -118,27 +118,27 @@ body.selecting #patternSelect{
 
 .presetCard{
   position:relative;
-  width:140px;
-  height:90px;
+  width:160px;      /* ちょい大きく */
+  height:110px;     /* ちょい大きく */
   border-radius:10px;
   border:1px solid #0002;
-  background:#000;        /* デフォルトは黒 */
+  background:#fff;  /* 背景を白に */
   cursor:pointer;
   overflow:hidden;
-  opacity:.85;
+  opacity:.9;
 }
 .presetCard.active{
   opacity:1;
 }
 
-/* サムネ画像部分 */
+/* サムネ画像部分（白背景＋服を少し大きめに見せる） */
 .presetThumb{
   position:absolute;
   inset:0;
-  background:#111 center/cover no-repeat;
+  background:#fff center/contain no-repeat;
 }
 
-/* 下部のラベル（「パターン1 (A-B-C)」など） */
+/* 下部のラベル（このままでOK） */
 .presetLabel{
   position:absolute;
   left:0;
@@ -146,19 +146,14 @@ body.selecting #patternSelect{
   bottom:0;
   padding:4px 6px;
   font-size:11px;
-  color:#fff;
+  color:#000;
   text-align:center;
-  background:linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0));
+  background:linear-gradient(to top, rgba(255,255,255,.9), rgba(255,255,255,0));
 }
 
-/* アクティブなカードの枠を光らせる */
 .presetCard.active .presetThumb{
-  outline:2px solid #fff;
+  outline:2px solid #000;
 }
-
-
-
-
 
   
 </style>
@@ -336,9 +331,12 @@ function loadModel(path){
       msg('garment.glb を読み込みました');
       loadAssignFromStorage();
       applyAssignments();
-      // ★プリセットボタンを初期化（最初の1回だけでよければガードしてもOK）
+      // ★プリセットボタンを初期化
       initPresetButtons();
 
+      applyPatternByIndex(0);   // デフォルト：パターン1 (A-B-C)
+      setActivePreset(0);
+      generateAllPresetThumbs();
     },
     undefined,
     (err) => {
@@ -424,6 +422,11 @@ const state = {
   C:{ tex:null, url:'' },
 };
 
+let thumbsGenerated = false;
+function hasAllTextures(){
+  return !!(state.A.tex && state.B.tex && state.C.tex);
+}
+
 // ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
 // ★ key を material.name にする
 const MAT_ZONE = {
@@ -456,6 +459,9 @@ function loadTexFromUrlFor(key, url){
     applyAssignments();
     updateBubblePreviews();
     msg(`生地${key}（URL）を読み込みました`);
+
+    // A/B/C が揃ったタイミングで6パターン分のサムネを自動生成
+    generateAllPresetThumbs();
   });
 }
 
@@ -807,6 +813,27 @@ function capturePresetThumb(index){
   controls.update();
 }
 
+// A/B/C が全部入っていてモデルも読み込み済みなら、6パターン分のサムネを一気に作る
+function generateAllPresetThumbs(){
+  if (!model || !hasAllTextures() || thumbsGenerated) return;
+  thumbsGenerated = true;
+
+  // 現在の割り当てをバックアップ
+  const backupAssign = { ...assign };
+
+  PATTERN_PERMS.forEach((p, idx) => {
+    applyPatternByIndex(idx);   // パターン適用
+    capturePresetThumb(idx);    // サムネ撮影
+  });
+
+  // 割り当てを元に戻す
+  Object.keys(assign).forEach(k => delete assign[k]);
+  Object.assign(assign, backupAssign);
+  applyAssignments();
+
+  // デフォルトはパターン1を選択状態にしておく
+  setActivePreset(0);
+}
 
 // ===== 下部のカードを実際に作る =====
 const presetsEl = document.getElementById('presets');
