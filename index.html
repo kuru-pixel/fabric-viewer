@@ -135,7 +135,16 @@ body.selecting #patternSelect{
 .presetThumb{
   position:absolute;
   inset:0;
-  background:#fff center/contain no-repeat;
+
+  /* 背景は白のまま */
+  background-color:#fff;
+
+  /* ★ここがポイント */
+  background-position:center;
+  background-repeat:no-repeat;
+
+  /* cover → contain だと小さくなるので使わない */
+  background-size: 120% auto; /* ← これで服だけ大きく見える */
 }
 
 /* 下部のラベル（このままでOK） */
