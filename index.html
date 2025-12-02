@@ -115,25 +115,57 @@ body.selecting #patternSelect{
     gap:12px;
     z-index:5;
   }
-  .presetCard{
-    width:120px;
-    height:80px;
-    border-radius:10px;
-    border:1px solid #0002;
-    background:#000c;
-    cursor:pointer;
-    display:flex;
-    align-items:flex-end;
-    justify-content:center;
-    color:#fff;
-    font-size:12px;
-    padding-bottom:6px;
-    opacity:.7;
-  }
-  .presetCard.active{
-    outline:2px solid #fff;
-    opacity:1;
-  }
+  /* ==== 下部 プリセットパターン ==== */
+#presets{
+  position:fixed;
+  left:50%;
+  bottom:20px;
+  transform:translateX(-50%);
+  display:flex;
+  gap:12px;
+  z-index:5;
+}
+
+.presetCard{
+  position:relative;
+  width:140px;
+  height:90px;
+  border-radius:10px;
+  border:1px solid #0002;
+  background:#000;        /* デフォルトは黒 */
+  cursor:pointer;
+  overflow:hidden;
+  opacity:.85;
+}
+.presetCard.active{
+  opacity:1;
+}
+
+/* サムネ画像部分 */
+.presetThumb{
+  position:absolute;
+  inset:0;
+  background:#111 center/cover no-repeat;
+}
+
+/* 下部のラベル（「パターン1 (A-B-C)」など） */
+.presetLabel{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:4px 6px;
+  font-size:11px;
+  color:#fff;
+  text-align:center;
+  background:linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0));
+}
+
+/* アクティブなカードの枠を光らせる */
+.presetCard.active .presetThumb{
+  outline:2px solid #fff;
+}
+
 
 
 
@@ -752,6 +784,39 @@ targetMats.forEach(m => {
   msg(perm.label + ' を適用しました');
 }
 
+// サムネ用のカメラ位置（2枚目スクショっぽい斜めから）
+const THUMB_CAM_POS    = new THREE.Vector3(1.4, 1.6, 3.0);
+const THUMB_CAM_TARGET = new THREE.Vector3(0, 1.2, 0);
+
+function capturePresetThumb(index){
+  if (!model) return;                         // モデルまだ読み込み前なら何もしない
+  const card = presetsEl.children[index];
+  if (!card) return;
+  const thumbEl = card.querySelector('.presetThumb');
+  if (!thumbEl) return;
+
+  // いまのカメラ状態を退避
+  const oldPos    = camera.position.clone();
+  const oldTarget = controls.target.clone();
+
+  // サムネ用ポーズに変更
+  camera.position.copy(THUMB_CAM_POS);
+  controls.target.copy(THUMB_CAM_TARGET);
+  controls.update();
+
+  // 1枚レンダリングしてデータURL取得
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+
+  // カードの背景に貼る
+  thumbEl.style.backgroundImage = `url(${url})`;
+
+  // カメラ状態を元に戻す
+  camera.position.copy(oldPos);
+  controls.target.copy(oldTarget);
+  controls.update();
+}
+
 
 // ===== 下部のカードを実際に作る =====
 const presetsEl = document.getElementById('presets');
@@ -771,14 +836,24 @@ function initPresetButtons(){
   PATTERN_PERMS.forEach((p, idx)=>{
     const btn = document.createElement('button');
     btn.className = 'presetCard';
-    btn.textContent = p.label;   // 「パターン1 (A-B-C)」など
+    btn.innerHTML = `
+      <div class="presetThumb"></div>
+      <div class="presetLabel">${p.label}</div>
+    `;
+
     btn.addEventListener('click', ()=>{
+      // パターン適用（本体のジャケットの模様が切り替わる）
       applyPatternByIndex(idx);
       setActivePreset(idx);
+
+      // 今の状態でサムネを撮って、このカードに貼る
+      capturePresetThumb(idx);
     });
+
     presetsEl.appendChild(btn);
   });
 }
+
 
 
 
