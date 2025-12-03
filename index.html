@@ -36,8 +36,32 @@
   #bubble{position:fixed; z-index:7; display:none; transform:translate(-50%,-115%); pointer-events:auto;
     background:#111e; color:#fff; backdrop-filter: blur(4px);border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;}
   #bubble .row{display:flex; gap:6px; align-items:center; flex-wrap:wrap; max-width:320px}
-  .chip{width:56px;height:56px;border-radius:8px;border:1px solid #fff5;background:#222 center/cover no-repeat;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;font-weight:700;letter-spacing:.5px;}
+  .chip{
+  position:relative;                /* 追加 */
+  width:56px;
+  height:56px;
+  border-radius:8px;
+  border:1px solid #fff5;
+  background:#222 center/cover no-repeat;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  letter-spacing:.5px;
+}
+/* 右下の A/B/C ラベル */
+.chip-tag{
+  position:absolute;
+  right:4px;
+  bottom:4px;
+  padding:2px 4px;
+  font-size:10px;
+  border-radius:4px;
+  background:rgba(0,0,0,.75);
+  color:#fff;
+}
+
   .chip.none{background:#222}
   .chip:hover{outline:2px solid #fff9}
 
@@ -229,12 +253,12 @@ body.selecting #patternSelect{
 <!-- クリック位置に出る吹き出し -->
 <div id="bubble">
   <div style="font-size:12px;margin-bottom:4px">生地を割り当て</div>
-  <div class="row">
-    <button class="chip" id="pickA">A</button>
-    <button class="chip" id="pickB">B</button>
-    <button class="chip" id="pickC">C</button>
-    <button class="chip none" id="pickNone">なし</button>
-  </div>
+<div class="row">
+  <button class="chip" id="pickA"><span class="chip-tag">A</span></button>
+  <button class="chip" id="pickB"><span class="chip-tag">B</span></button>
+  <button class="chip" id="pickC"><span class="chip-tag">C</span></button>
+  <button class="chip none" id="pickNone">なし</button>
+</div>
 </div>
 
 <div id="presets"></div>
@@ -659,10 +683,12 @@ const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') }
 function updateBubblePreviews(){
   SLOTS.forEach(k=>{
     const el = chipEls[k]; if(!el) return;
-    el.style.backgroundImage = state[k].url ? `url(${state[k].url})` : 'none';
-    el.textContent = state[k].url ? '' : k;
+    el.style.backgroundImage = state[k].url
+      ? `url(${state[k].url})`
+      : 'none';
   });
 }
+
 updateBubblePreviews();
 
 const _nm = new THREE.Matrix3();
