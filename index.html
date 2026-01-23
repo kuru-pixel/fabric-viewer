@@ -198,10 +198,13 @@ body.selecting #patternSelect{
   <div class="wrap">
     <h1>どの服を作製しますか？</h1>
     <div id="patternGrid">
-      <button class="patternCard disabled" data-id="RI-1"><div class="name">RI-1</div><div class="thumb"></div></button>
-      <button class="patternCard disabled" data-id="RI-2"><div class="name">RI-2</div><div class="thumb"></div></button>
+      <button class="patternCard" data-id="RI-1"><div class="name">RI-1</div><div class="thumb" id="thumb-RI1"></div></button>
+      <button class="patternCard" data-id="RI-2"><div class="name">RI-2</div><div class="thumb" id="thumb-RI2"></div></button>
       <button class="patternCard" data-id="RI-3"><div class="name">RI-3</div><div class="thumb" id="thumb-RI3"></div></button>
-      <button class="patternCard disabled" data-id="RI-4"><div class="name">RI-4</div><div class="thumb"></div></button>
+      <button class="patternCard" data-id="RI-4"><div class="name">RI-4</div><div class="thumb" id="thumb-RI4"></div></button>
+      <button class="patternCard" data-id="RI-5"><div class="name">RI-5</div><div class="thumb" id="thumb-RI5"></div></button>
+      <button class="patternCard" data-id="RISC-Setup"><div class="name">RISC-Setup</div><div class="thumb" id="thumb-RISC"></div></button>
+
     </div>
   </div>
 </div>
@@ -276,7 +279,10 @@ body.selecting #patternSelect{
 /* ========= 基本 ========= */
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
-const SLOTS = ['A','B','C'];
+function getSlots(){
+  const def = PATTERNS[currentPatternId];
+  return (def && Array.isArray(def.slots) && def.slots.length) ? def.slots : ['A','B','C'];
+}
 
 // ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
@@ -289,11 +295,11 @@ const initialFabrics = fabricsParam
   : [];
 
 // A/B/C 各スロットに今どの生地IDが入っているか
-const slotFabricIds = {
-  A: initialFabrics[0] || null,
-  B: initialFabrics[1] || null,
-  C: initialFabrics[2] || null,
-};
+let slotFabricIds = {}; // ★動的に作る
+getSlots().forEach((k, i)=>{
+  slotFabricIds[k] = initialFabrics[i] || null;
+});
+
 
 // いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
 let currentPatternId = patternParam;
@@ -306,11 +312,12 @@ function fabricIdToUrl(id) {
 
 // 型ごとの定義
 const PATTERNS = {
-  'RI-1': null,
-  'RI-2': null,
-  'RI-3': { glb: './assets/garment.glb', thumb: null },
-  //'RI-3': { glb: './assets/garment.glb', thumb: './assets/thumbs/RI-3.png' },
-  'RI-4': null
+  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
 };
 
 /* three.js */
@@ -346,6 +353,15 @@ let model, targetMats = [];
 
 /* モデルを読む関数（選択後に呼ぶ） */
 function loadModel(path){
+
+    // ★追加：前のモデルを消す
+  if (model && model.parent) {
+    scene.remove(model);
+    model = null;
+  }
+  targetMats = [];
+  Object.keys(assign).forEach(k => delete assign[k]); // 割当もリセットしたいなら
+  
   const loader = new THREE.GLTFLoader();
   loader.load(
     path,
@@ -449,11 +465,17 @@ function fit(obj){
 }
 
 const texLoader = new THREE.TextureLoader();
-const state = {
-  A:{ tex:null, url:'' },
-  B:{ tex:null, url:'' },
-  C:{ tex:null, url:'' },
-};
+let state = {}; // ★動的に作る
+
+function rebuildState(){
+  const next = {};
+  getSlots().forEach(k=>{
+    // 既にあれば引き継ぎ（A/B/Cの画像を保持したい）
+    next[k] = state[k] || { tex:null, url:'' };
+  });
+  state = next;
+}
+
 
 let thumbsGenerated = false;
 function hasAllTextures(){
@@ -462,16 +484,22 @@ function hasAllTextures(){
 
 // ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
 // ★ key を material.name にする
-const MAT_ZONE = {
-  // ZONE1
-  'Nylon_Featherweight_152080': 'Z1',
 
-  // ZONE2
-  'Nylon_Featherweight Copy 2_152118': 'Z2',
-
-  // ZONE3
-  'Nylon_Featherweight Copy 1_152099': 'Z3',
+const MAT_ZONE_BY_PATTERN = {
+  'RI-1': {
+    // 'MaterialName': 'Z1' みたいに入れる
+  },
+  'RI-2': {},
+  'RI-3': {
+    'Nylon_Featherweight_152080': 'Z1',
+    'Nylon_Featherweight Copy 2_152118': 'Z2',
+    'Nylon_Featherweight Copy 1_152099': 'Z3',
+  },
+  'RI-4': {},
+  'RI-5': {},
+  'RISC-Setup': {},
 };
+
   
 // コンソールで uuid を把握するためのヘルパ（あとで説明する）
 function logMaterialsForZoneSetup() {
@@ -499,10 +527,11 @@ function loadTexFromUrlFor(key, url){
 }
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
+rebuildState();
 (function initFromBase(){
   if (!initialFabrics.length) return;
 
-  const slotOrder = ['A','B','C'];
+  const slotOrder = getSlots();
   console.log('BASEから渡ってきた生地ID:', initialFabrics);
 
   initialFabrics.forEach((id, idx)=>{
@@ -667,7 +696,7 @@ function clearTexture(key){
   msg(`生地${key}をクリアしました`);
 }
 
-SLOTS.forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
+getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
 
 $('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
 $('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
@@ -681,7 +710,7 @@ const bubble = $('bubble');
 const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') };
 
 function updateBubblePreviews(){
-  SLOTS.forEach(k=>{
+  getSlots().forEach(k=>{
     const el = chipEls[k]; if(!el) return;
     el.style.backgroundImage = state[k].url
       ? `url(${state[k].url})`
@@ -796,24 +825,21 @@ function applyPatternByIndex(index) {
   const perm = PATTERN_PERMS[index];
   if (!perm) return;
 
-  // いったん assign をクリア
   Object.keys(assign).forEach(k => { delete assign[k]; });
 
-  // すべてのマテリアルについて、
-  // MAT_ZONE からゾーン(Z1/Z2/Z3)を調べて → A/B/C を当てる
-targetMats.forEach(m => {
-  const zone = MAT_ZONE[m.name];
-  if (!zone) {
-    assign[m.uuid] = '—';
-    return;
-  }
-  const slot = perm[zone];
-  assign[m.uuid] = slot || '—';
-});
+  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+
+  targetMats.forEach(m => {
+    const zone = MAT_ZONE[m.name];
+    if (!zone) { assign[m.uuid] = '—'; return; }
+    const slot = perm[zone];
+    assign[m.uuid] = slot || '—';
+  });
 
   applyAssignments();
   msg(perm.label + ' を適用しました');
 }
+
 
 // サムネ用のカメラ位置（2枚目スクショっぽい斜めから）
 const THUMB_CAM_POS    = new THREE.Vector3(1.4, 1.6, 3.0);
@@ -951,9 +977,16 @@ $('resetAll').addEventListener('click', ()=>{
     const def = PATTERNS[id];
     if (!def){ msg(`${id} は準備中です`); return; }
     GLB_PATH = def.glb;
-    currentPatternId = id;            // ここで覚える！
-    document.body.classList.remove('selecting');
-    loadModel(GLB_PATH);
+currentPatternId = id;
+
+// ★追加：型が変わったのでスロット関連を更新
+rebuildState();
+slotFabricIds = {};
+getSlots().forEach((k)=> slotFabricIds[k] = null);
+
+document.body.classList.remove('selecting');
+loadModel(GLB_PATH);
+
   });
 })();
 
