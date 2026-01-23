@@ -279,27 +279,43 @@ body.selecting #patternSelect{
 /* ========= 基本 ========= */
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
+
+// ===== URLパラメータ =====
+const params = new URLSearchParams(window.location.search);
+const fabricsParam = params.get('fabrics') || '';
+const patternParam = params.get('pattern') || 'RI-3';
+
+// ===== 型ごとの定義（先に置く！）=====
+const PATTERNS = {
+  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
+};
+
+// ===== いま表示している型（先に決める！）=====
+let currentPatternId = patternParam;
+
+// ===== slots =====
 function getSlots(){
   const def = PATTERNS[currentPatternId];
   return (def && Array.isArray(def.slots) && def.slots.length) ? def.slots : ['A','B','C'];
 }
 
-// ===== URLパラメータ（生地IDと型ID） =====
-const params = new URLSearchParams(window.location.search);
-const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
-const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
-
-// URL から渡ってきた A/B/C の生地ID
+// URL から渡ってきた生地ID
 const initialFabrics = fabricsParam
-  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3)
+  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean)
   : [];
 
-// A/B/C 各スロットに今どの生地IDが入っているか
-let slotFabricIds = {}; // ★動的に作る
+// slotFabricIds（currentPatternId確定後に作る）
+let slotFabricIds = {};
 getSlots().forEach((k, i)=>{
   slotFabricIds[k] = initialFabrics[i] || null;
 });
 
+  
 
 // いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
 let currentPatternId = patternParam;
