@@ -988,7 +988,10 @@ document.body.classList.remove('selecting');
 loadModel(GLB_PATH);
 
   });
-})();
+}
+
+initPatternSelect();
+)();
 
 // GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
@@ -1023,3 +1026,4 @@ document.getElementById('backHomeBtn').addEventListener('click', function () {
   
 </script>
 </body></html>
+
