@@ -280,12 +280,21 @@ body.selecting #patternSelect{
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 
-// ===== URLパラメータ =====
+// ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
-const fabricsParam = params.get('fabrics') || '';
-const patternParam = params.get('pattern') || 'RI-3';
+const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
+const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
 
-// ===== 型ごとの定義（先に置く！）=====
+// いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
+let currentPatternId = patternParam;
+
+// ID → 画像パスを自動で組み立てる
+const FABRIC_EXT = '.jpg';
+function fabricIdToUrl(id) {
+  return `./assets/fabrics/${id}${FABRIC_EXT}`;
+}
+
+// 型ごとの定義
 const PATTERNS = {
   'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
   'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
@@ -295,36 +304,21 @@ const PATTERNS = {
   'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
 };
 
-// ===== いま表示している型（先に決める！）=====
-let currentPatternId = patternParam;
-
-// ===== slots =====
 function getSlots(){
   const def = PATTERNS[currentPatternId];
   return (def && Array.isArray(def.slots) && def.slots.length) ? def.slots : ['A','B','C'];
 }
 
-// URL から渡ってきた生地ID
+// URL から渡ってきた生地ID（スロット数に合わせる）
 const initialFabrics = fabricsParam
-  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean)
+  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, getSlots().length)
   : [];
 
-// slotFabricIds（currentPatternId確定後に作る）
-let slotFabricIds = {};
+// 各スロットに今どの生地IDが入っているか
+let slotFabricIds = {}; // ★動的に作る
 getSlots().forEach((k, i)=>{
   slotFabricIds[k] = initialFabrics[i] || null;
 });
-
-  
-
-// いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
-//let currentPatternId = patternParam;
-  
-// ID → 画像パスを自動で組み立てる
-const FABRIC_EXT = '.jpg';
-function fabricIdToUrl(id) {
-  return `./assets/fabrics/${id}${FABRIC_EXT}`;
-}
 
 /* three.js */
 const canvas = $('c');
@@ -970,35 +964,35 @@ $('resetAll').addEventListener('click', ()=>{
 (function initPatternSelect(){
   const ri3 = PATTERNS['RI-3'];
   const thumbEl = $('thumb-RI3');
-  
+
   if (ri3?.thumb && thumbEl){
     const img = new Image();
-    img.onload = ()=> { thumbEl.style.backgroundImage = `url(${ri3.thumb})`; };
+    img.onload  = ()=> { thumbEl.style.backgroundImage = `url(${ri3.thumb})`; };
     img.onerror = ()=> { makeThumbFromGLB(ri3.glb, thumbEl); };
     img.src = ri3.thumb;
   }
-  $('patternGrid').addEventListener('click', (e)=>{
+
+  const grid = $('patternGrid');
+  if (!grid) return;
+
+  grid.addEventListener('click', (e)=>{
     const card = e.target.closest('.patternCard'); if(!card) return;
     const id = card.dataset.id;       // "RI-3" とか
     const def = PATTERNS[id];
     if (!def){ msg(`${id} は準備中です`); return; }
+
     GLB_PATH = def.glb;
-currentPatternId = id;
+    currentPatternId = id;
 
-// ★追加：型が変わったのでスロット関連を更新
-rebuildState();
-slotFabricIds = {};
-getSlots().forEach((k)=> slotFabricIds[k] = null);
+    // ★追加：型が変わったのでスロット関連を更新
+    rebuildState();
+    slotFabricIds = {};
+    getSlots().forEach((k)=> slotFabricIds[k] = null);
 
-document.body.classList.remove('selecting');
-loadModel(GLB_PATH);
-
+    document.body.classList.remove('selecting');
+    loadModel(GLB_PATH);
   });
-}
-
-initPatternSelect();
-)();
-
+})();
 // GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
   const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
@@ -1032,4 +1026,3 @@ document.getElementById('backHomeBtn').addEventListener('click', function () {
   
 </script>
 </body></html>
-
