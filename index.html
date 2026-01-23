@@ -326,16 +326,6 @@ function fabricIdToUrl(id) {
   return `./assets/fabrics/${id}${FABRIC_EXT}`;
 }
 
-// 型ごとの定義
-const PATTERNS = {
-  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
-  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
-};
-
 /* three.js */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
