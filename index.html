@@ -589,6 +589,19 @@ function loadTexByFabricId(key, id){
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
+
+// DEBUG helper for DevTools
+window.__FV_DEBUG__ = {
+  get slotFabricIds(){ return slotFabricIds; },
+  get state(){ return state; },
+  get assign(){ return assign; },
+  dump(){ console.log({ slotFabricIds, state, assign }); },
+};
+console.log("__FV_DEBUG__ ready", window.__FV_DEBUG__);
+
+
+
+
 (function initFromBase(){
   if (!initialFabrics.length) return;
 
