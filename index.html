@@ -568,7 +568,7 @@ function loadTexFromUrlFor(key, url, onDone){
     onDone && onDone(err, url);
   });
 }
-
+/*
 // Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
 function loadTexByFabricId(key, id){
   const urls = [
@@ -586,6 +586,29 @@ function loadTexByFabricId(key, id){
   };
   tryLoad(0);
 }
+  */
+
+// 連番対応：id.jpg が無ければ id_2.jpg / id-2.jpg を優先 → 次に _1 / -1
+function loadTexByFabricId(key, id){
+  const base = `./assets/fabrics/${id}`;
+  const urls = [
+    `${base}.jpg`,     // まず通常
+    `${base}_2.jpg`,   // 次に _2（あなたの希望）
+    `${base}-2.jpg`,   // -2 形式にも対応
+    `${base}_1.jpg`,   // その次に _1
+    `${base}-1.jpg`,   // -1
+  ];
+
+  const tryLoad = (i)=>{
+    loadTexFromUrlFor(key, urls[i], (err)=>{
+      if(err && i + 1 < urls.length) return tryLoad(i + 1);
+      if(err) msg(`生地画像が見つかりません: ${id}（試行: ${urls.join(', ')}）`);
+    });
+  };
+  tryLoad(0);
+}
+
+  
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
