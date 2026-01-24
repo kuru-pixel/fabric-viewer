@@ -350,6 +350,7 @@ controls.enablePan = false; if ('zoomToCursor' in controls) controls.zoomToCurso
 
 /* モデル */
 let model, targetMats = [];
+let origMatState = new Map(); // uuid -> original material snapshot
 
 /* モデルを読む関数（選択後に呼ぶ） */
 function loadModel(path){
@@ -445,6 +446,25 @@ function analyze(root){
     }
   });
   targetMats = Array.from(mats).filter(isSupportedMat);
+
+  // snapshot originals so unassigned mats (buttons/topstitch etc) can be restored
+  origMatState = new Map();
+  for(const m of targetMats){
+    origMatState.set(m.uuid, {
+      map: m.map || null,
+      color: (m.color && m.color.clone) ? m.color.clone() : null,
+      metalness: (typeof m.metalness==='number') ? m.metalness : undefined,
+      roughness: (typeof m.roughness==='number') ? m.roughness : undefined,
+      normalMap: m.normalMap || null,
+      aoMap: m.aoMap || null,
+      emissiveMap: m.emissiveMap || null,
+      emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
+      alphaMap: m.alphaMap || null,
+      transparent: !!m.transparent,
+      opacity: (typeof m.opacity==='number') ? m.opacity : 1
+    });
+  }
+
   updateMatInfo();
     // ★初回セットアップ用：コンソールに material.uuid を出す
   logMaterialsForZoneSetup();
@@ -483,11 +503,29 @@ function hasAllTextures(){
 }
 
 // ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
-// ★ key を material.name にする
+// ★ key は material.name でも material.uuid でもOK（どちらでもマッチ）
 
 const MAT_ZONE_BY_PATTERN = {
   'RI-1': {
-    // 'MaterialName': 'Z1' みたいに入れる
+    // RI-1 zone mapping (uuid -> zone). Z1=生地A, Z2=生地B, Z3=生地C
+    // NOTE: uuidがA/B両方に出たものは“どちらか片方しか割当できない”ため、いったんZ1に寄せています。
+    //       もしBにしたいなら該当uuidの値をZ2に変更してください。
+
+    // ---- 生地A (Z1) ----
+    '280fc7ec-a129-4352-8333-b10654ddf8d5': 'Z1',
+    'e6ec3827-2650-4dc4-a073-990c86724f1d': 'Z1',
+    '34841282-cc7d-47f1-9aec-b92629591ba9': 'Z1',
+    '782c93b0-5284-4e4f-845e-059bdc573b5c': 'Z1', // A/B両方に出た
+    '838f82ab-53bc-4c2b-ac49-c18ea2a1d136': 'Z1', // A/B両方に出た
+
+    // ---- 生地B (Z2) ----
+    '19777bd4-0fe9-4d0e-84ec-06fa0102e3ed': 'Z2',
+    '27a2c055-20b4-40ae-8c20-886eb8ce6964': 'Z2',
+    'd2e0c058-51d8-43b2-af88-3681344cf9b1': 'Z2',
+    '1f2db43d-bdaa-4a71-a385-a0850747978f': 'Z2',
+    'd2345aae-0fc6-40d5-a69d-c5db69db18d9': 'Z2',
+
+    // 生地C (Z3) は「それ以外の布系マテリアル」に自動適用（下の applyPatternByIndex を参照）
   },
   'RI-2': {},
   'RI-3': {
@@ -503,27 +541,50 @@ const MAT_ZONE_BY_PATTERN = {
   
 // コンソールで uuid を把握するためのヘルパ（あとで説明する）
 function logMaterialsForZoneSetup() {
-  console.log('--- material list for MAT_ZONE ---');
-  targetMats.forEach(m => {
-    console.log(m.name || '(no-name)', m.uuid);
-  });
-  console.log('上の uuid を見ながら MAT_ZONE に Z1/Z2/Z3 を割り当ててください。');
+  console.log('--- material list for MAT_ZONE (name / uuid) ---');
+  const rows = targetMats.map((m,i)=>({
+    i,
+    name: m.name || '(no-name)',
+    uuid: m.uuid
+  }));
+  console.table(rows);
+  console.log('MAT_ZONE_BY_PATTERN に入れるキーは name か uuid のどちらでもOKです。');
+  console.log("例:  'MaterialNameHere': 'Z1',  または  '" + (rows[0]?.uuid || 'uuid_here') + "': 'Z1'");
 }
 
 // ===== URLから生地画像を読み込む =====
-function loadTexFromUrlFor(key, url){
-  if (!state[key]) return;
-
-  state[key].url = url;
+function loadTexFromUrlFor(key, url, onDone){
+  if(!state[key]) return;
+  state[key].url=url;
   state[key].tex = texLoader.load(url, ()=>{
     prepTexture(state[key].tex);
     applyAssignments();
     updateBubblePreviews();
-    msg(`生地${key}（URL）を読み込みました`);
-
-    // A/B/C が揃ったタイミングで6パターン分のサムネを自動生成
+    msg(`生地${key}を読み込みました`);
     generateAllPresetThumbs();
+    onDone && onDone(null, url);
+  }, undefined, (err)=>{
+    console.warn('Texture load failed:', url, err);
+    onDone && onDone(err, url);
   });
+}
+
+// Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
+function loadTexByFabricId(key, id){
+  const urls = [
+    `./assets/fabrics/${id}.jpg`,
+    `./assets/fabrics/${id}_1.jpg`
+  ];
+  const tryLoad = (i)=>{
+    loadTexFromUrlFor(key, urls[i], (err)=>{
+      if(err && i+1 < urls.length){
+        tryLoad(i+1);
+      }else if(err){
+        msg(`生地画像が見つかりません: ${id}`);
+      }
+    });
+  };
+  tryLoad(0);
 }
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
@@ -538,9 +599,8 @@ rebuildState();
     const slot = slotOrder[idx];
     if (!slot) return;
 
-    const url = fabricIdToUrl(id);
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
-    loadTexFromUrlFor(slot, url);
+    loadTexByFabricId(slot, id);
   });
 })();
 
@@ -568,8 +628,30 @@ function applyAssignments(){
     const key = assign[m.uuid];
     const tex = (key && state[key]) ? state[key].tex : null;
     if(isSupportedMat(m)){
-      if(!tex || key==='—'){ m.map = null; if(m.color) m.color.set(0xffffff); }
-      else { m.map = tex; }
+      if(!tex || key==='—'){
+        const orig = origMatState.get(m.uuid);
+        if(orig){
+          m.map = orig.map;
+          if(m.color){
+            if(orig.color) m.color.copy(orig.color);
+            else m.color.set(0xffffff);
+          }
+          if(typeof orig.metalness==='number') m.metalness = orig.metalness;
+          if(typeof orig.roughness==='number') m.roughness = orig.roughness;
+          m.normalMap = orig.normalMap;
+          m.aoMap = orig.aoMap;
+          m.emissiveMap = orig.emissiveMap;
+          if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+          m.alphaMap = orig.alphaMap;
+          m.transparent = orig.transparent;
+          m.opacity = orig.opacity;
+        }else{
+          m.map = null;
+          if(m.color) m.color.set(0xffffff);
+        }
+      }else{
+        m.map = tex;
+      }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
       if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
@@ -782,6 +864,7 @@ canvas.addEventListener('pointerdown', onCanvasClick);
   })));
 });
 //一時的に入れる
+
   
 
 function ensureUniqueMaterialOnMesh(mesh, idx){
@@ -855,7 +938,13 @@ function applyPatternByIndex(index) {
   const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
 
   targetMats.forEach(m => {
-    const zone = MAT_ZONE[m.name];
+    let zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name];
+    // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
+    if(!zone){
+      const n = (m.name || '');
+      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n);
+      if(isFabricLike) zone = 'Z3';
+    }
     if (!zone) { assign[m.uuid] = '—'; return; }
     const slot = perm[zone];
     assign[m.uuid] = slot || '—';
