@@ -817,6 +817,8 @@ function clearTexture(key){
   const s = state[key];
   s.tex = null;
   s.url = '';
+  // ★追加：スロットの生地IDもクリア
+  if (slotFabricIds && (key in slotFabricIds)) slotFabricIds[key] = null;
   updateBubblePreviews();
   lastOpWasNone = true;
   applyAssignments();
@@ -1145,10 +1147,11 @@ $('resetAll').addEventListener('click', ()=>{
     GLB_PATH = def.glb;
     currentPatternId = id;
 
-    // ★追加：型が変わったのでスロット関連を更新
+    // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
     rebuildState();
-    slotFabricIds = {};
-    getSlots().forEach((k)=> slotFabricIds[k] = null);
+    const nextIds = {};
+    getSlots().forEach((k)=>{ nextIds[k] = slotFabricIds[k] || null; });
+    slotFabricIds = nextIds;
 
     document.body.classList.remove('selecting');
     loadModel(GLB_PATH);
