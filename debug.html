@@ -1,0 +1,1179 @@
+<!doctype html><html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fabric Viewer</title>
+<style>
+  /* パネル開閉の矢印ボタンは使わないので非表示にする */
+#uiToggle,
+#reopen {
+  display: none !important;
+}
+
+  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui;
+            background: radial-gradient(1200px 800px at 60% 40%, #ffffff 0%, #eef1f5 60%, #dde2ea 100%);}
+  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+  /* ==== 左パネル（開閉スライド） ==== */
+  #uiWrap{position:fixed;z-index:5;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
+  #ui{
+    background:rgba(20,20,22,.55);color:#fff;padding:14px;border-radius:16px;max-width:420px;
+    border:1px solid rgba(255,255,255,.16);backdrop-filter: blur(10px) saturate(120%);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);}
+  #ui label{display:block;font-size:12px;margin:6px 0 4px}
+  .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+  .mini{margin-left:6px;font-size:12px;padding:2px 6px}
+  #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;
+    background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006;
+    position:absolute; top:50%; transform:translateY(-50%);}
+  #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
+  #uiWrap.collapsed #uiToggle{position: fixed;left: 8px;top: 50%;transform: translateY(-50%);z-index: 6;width: 40px;height: 64px;font-size:22px;border-radius:10px;}
+  .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
+  .block h4{margin:0 0 4px 0;font-size:13px}
+  #footer{position:fixed;right:10px;bottom:10px;z-index:4;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
+  #msg{position:fixed;z-index:6;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
+
+  /* ==== クリック時の吹き出し ==== */
+  #bubble{position:fixed; z-index:7; display:none; transform:translate(-50%,-115%); pointer-events:auto;
+    background:#111e; color:#fff; backdrop-filter: blur(4px);border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;}
+  #bubble .row{display:flex; gap:6px; align-items:center; flex-wrap:wrap; max-width:320px}
+  .chip{
+  position:relative;                /* 追加 */
+  width:56px;
+  height:56px;
+  border-radius:8px;
+  border:1px solid #fff5;
+  background:#222 center/cover no-repeat;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  letter-spacing:.5px;
+}
+/* 右下の A/B/C ラベル */
+.chip-tag{
+  position:absolute;
+  right:4px;
+  bottom:4px;
+  padding:2px 4px;
+  font-size:10px;
+  border-radius:4px;
+  background:rgba(0,0,0,.75);
+  color:#fff;
+}
+
+  .chip.none{background:#222}
+  .chip:hover{outline:2px solid #fff9}
+
+  /* ==== 右上：履歴サムネ ==== */
+  #shots{position:fixed; z-index:8; top:10px; right:10px; display:flex; gap:8px; flex-direction:row-reverse; pointer-events:auto;}
+  #shots img{width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid #ffffff55;background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;}
+  #shots img:hover{ outline:2px solid #fff9 }
+
+  /* パネル再表示用ボタン */
+  #reopen{position:fixed; left:8px; top:50%; transform:translateY(-50%);
+    width:40px; height:64px; border:none; border-radius:10px;background:#e23; color:#fff; font-size:22px; line-height:64px; text-align:center;
+    box-shadow:0 2px 10px #0008; z-index:9999; cursor:pointer; display:none;}
+  body.panel-collapsed #reopen{ display:block; }
+
+  /* ほんのりビネット */
+  body::after{content:""; position:fixed; inset:0; pointer-events:none;
+    background: radial-gradient(1200px 800px at 60% 40%, rgba(0,0,0,0) 55%, rgba(0,0,0,.06) 100%);mix-blend-mode:multiply;}
+
+  /* ===== 型選択UI（selecting中だけ表示） ===== */
+  body.selecting #uiWrap,
+  body.selecting #uiToggle,
+  body.selecting #reopen,
+  body.selecting #shots,
+  body.selecting #bubble,
+  body.selecting #footer,
+  body.selecting #msg,
+  body.selecting canvas#c { display:none !important; }
+
+  #patternSelect{position:fixed; inset:0; z-index:20; display:none; place-items:center;}
+  /* selecting クラスが付いているときだけ表示 */
+body.selecting #patternSelect{
+  display:grid;
+}
+  #backHomeBtn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s;
+}
+
+#backHomeBtn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+  #patternSelect .wrap{width:min(1100px, 92vw);}
+  #patternSelect h1{margin:0 0 18px; font-weight:700; letter-spacing:.02em;font-size:clamp(20px, 3.2vw, 32px); color:#222a; text-align:center;}
+  #patternGrid{display:grid; gap:14px; grid-template-columns: repeat(4, 1fr);}
+  .patternCard{display:flex; flex-direction:column; gap:8px;padding:12px; border-radius:14px;background:#fff8; border:1px solid #0001; backdrop-filter:blur(8px);
+    box-shadow:0 6px 18px rgba(0,0,0,.12);cursor:pointer; transition:transform .08s ease, box-shadow .2s ease;}
+  .patternCard:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
+  .patternCard .name{ font-weight:700; color:#222; }
+  .patternCard .thumb{aspect-ratio: 4/3; border-radius:10px; border:1px dashed #0002; background:#f6f7fa center/contain no-repeat;}
+  .patternCard.disabled{ opacity:.45; cursor:not-allowed; }
+  .patternCard.disabled .thumb{ background:#f6f7fa; border-style:solid; }
+
+
+
+
+  /* ==== 下部 プリセットパターン ==== */
+#presets{
+  position:fixed;
+  left:50%;
+  bottom:20px;
+  transform:translateX(-50%);
+  display:flex;
+  gap:12px;
+  z-index:5;
+}
+
+.presetCard{
+  position:relative;
+  width:160px;      /* ちょい大きく */
+  height:110px;     /* ちょい大きく */
+  border-radius:10px;
+  border:1px solid #0002;
+  background:#fff;  /* 背景を白に */
+  cursor:pointer;
+  overflow:hidden;
+  opacity:.9;
+}
+.presetCard.active{
+  opacity:1;
+}
+
+/* サムネ画像部分（白背景＋服を少し大きめに見せる） */
+.presetThumb{
+  position:absolute;
+  inset:0;
+
+  /* 背景は白のまま */
+  background-color:#fff;
+
+  /* ★ここがポイント */
+  background-position:center;
+  background-repeat:no-repeat;
+
+  /* cover → contain だと小さくなるので使わない */
+  background-size: 300% auto; /* ← これで服だけ大きく見える */
+}
+
+/* 下部のラベル（このままでOK） */
+.presetLabel{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:4px 6px;
+  font-size:11px;
+  color:#000;
+  text-align:center;
+  background:linear-gradient(to top, rgba(255,255,255,.9), rgba(255,255,255,0));
+}
+
+.presetCard.active .presetThumb{
+  outline:2px solid #000;
+}
+
+  
+</style>
+</head>
+<body class="selecting">
+
+<!-- 型選択レイヤー -->
+<div id="patternSelect">
+  <div class="wrap">
+    <h1>どの服を作製しますか？</h1>
+    <div id="patternGrid">
+      <button class="patternCard" data-id="RI-1"><div class="name">RI-1</div><div class="thumb" id="thumb-RI1"></div></button>
+      <button class="patternCard" data-id="RI-2"><div class="name">RI-2</div><div class="thumb" id="thumb-RI2"></div></button>
+      <button class="patternCard" data-id="RI-3"><div class="name">RI-3</div><div class="thumb" id="thumb-RI3"></div></button>
+      <button class="patternCard" data-id="RI-4"><div class="name">RI-4</div><div class="thumb" id="thumb-RI4"></div></button>
+      <button class="patternCard" data-id="RI-5"><div class="name">RI-5</div><div class="thumb" id="thumb-RI5"></div></button>
+      <button class="patternCard" data-id="RISC-Setup"><div class="name">RISC-Setup</div><div class="thumb" id="thumb-RISC"></div></button>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===== 左パネル ===== -->
+<div id="uiWrap">
+  <div id="ui">
+    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
+    <div class="btnRow">
+      <button id="resetAll" title="割当を全て『なし』・白に戻す">リセット</button>
+    </div>
+
+
+    <!-- A〜E（倍率/回転は削除済み） -->
+<div class="block">
+  <h4>生地A</h4>
+  <div class="btnRow">
+    <!-- ここが生地選択ページに飛ぶボタンになる -->
+    <button id="changeA" type="button">生地を変更</button>
+    <button id="clearA" class="mini" type="button">クリアA</button>
+  </div>
+</div>
+
+<div class="block">
+  <h4>生地B</h4>
+  <div class="btnRow">
+    <button id="changeB" type="button">生地を変更</button>
+    <button id="clearB" class="mini" type="button">クリアB</button>
+  </div>
+</div>
+
+<div class="block">
+  <h4>生地C</h4>
+  <div class="btnRow">
+    <button id="changeC" type="button">生地を変更</button>
+    <button id="clearC" class="mini" type="button">クリアC</button>
+  </div>
+</div>
+
+
+  <!--   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>  -->
+  </div>
+</div>
+
+
+<!-- 右上：履歴サムネ -->
+<div id="shots"></div>
+
+<!-- クリック位置に出る吹き出し -->
+<div id="bubble">
+  <div style="font-size:12px;margin-bottom:4px">生地を割り当て</div>
+<div class="row">
+  <button class="chip" id="pickA"><span class="chip-tag">A</span></button>
+  <button class="chip" id="pickB"><span class="chip-tag">B</span></button>
+  <button class="chip" id="pickC"><span class="chip-tag">C</span></button>
+  <button class="chip none" id="pickNone">なし</button>
+</div>
+</div>
+
+<div id="presets"></div>
+
+<div id="footer">ドラッグで回転 / ホイールでズーム</div>
+<div id="backHomeBtn">← ホームへ戻る</div>
+<div id="msg" hidden></div>
+<canvas id="c"></canvas>
+
+
+<script src="./assets/threejs/three.min.js"></script>
+<script src="./assets/threejs/GLTFLoader.js"></script>
+<script src="./assets/threejs/OrbitControls.js"></script>
+<script>
+/* ========= 基本 ========= */
+let GLB_PATH = null;
+const $ = (id)=>document.getElementById(id);
+
+// ===== URLパラメータ（生地IDと型ID） =====
+const params = new URLSearchParams(window.location.search);
+const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
+const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
+
+// いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
+let currentPatternId = patternParam;
+
+// ID → 画像パスを自動で組み立てる
+const FABRIC_EXT = '.jpg';
+function fabricIdToUrl(id) {
+  return `./assets/fabrics/${id}${FABRIC_EXT}`;
+}
+
+// 型ごとの定義
+const PATTERNS = {
+  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
+};
+
+function getSlots(){
+  const def = PATTERNS[currentPatternId];
+  return (def && Array.isArray(def.slots) && def.slots.length) ? def.slots : ['A','B','C'];
+}
+
+// URL から渡ってきた生地ID（スロット数に合わせる）
+const initialFabrics = fabricsParam
+  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, getSlots().length)
+  : [];
+
+// 各スロットに今どの生地IDが入っているか
+let slotFabricIds = {}; // ★動的に作る
+getSlots().forEach((k, i)=>{
+  slotFabricIds[k] = initialFabrics[i] || null;
+});
+
+/* three.js */
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene(); scene.background = null;
+const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
+const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(camera);
+scene.add(new THREE.HemisphereLight(0xffffff,0x223,0.45));
+
+const dir = new THREE.DirectionalLight(0xfff2e0, 0.85);
+dir.castShadow = true;
+dir.position.set(1, 1, 1).multiplyScalar(10);
+const camAim = new THREE.Object3D(); camAim.position.set(0,0,-1); camera.add(camAim);
+dir.target = camAim; camera.add(dir);
+dir.shadow.mapSize.set(1024,1024); dir.shadow.camera.near=0.1; dir.shadow.camera.far=20; dir.shadow.bias=-0.0005;
+
+const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-3,2.5,-2); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(0,3,-4); scene.add(rim);
+
+controls.enablePan = false; if ('zoomToCursor' in controls) controls.zoomToCursor = false;
+
+/* モデル */
+let model, targetMats = [];
+let origMatState = new Map(); // uuid -> original material snapshot
+
+/* モデルを読む関数（選択後に呼ぶ） */
+function loadModel(path){
+
+    // ★追加：前のモデルを消す
+  if (model && model.parent) {
+    scene.remove(model);
+    model = null;
+  }
+  targetMats = [];
+  Object.keys(assign).forEach(k => delete assign[k]); // 割当もリセットしたいなら
+  
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    path,
+    (glb) => {
+      const json = glb.parser?.json || {};
+      console.log('[GLB INFO] extensionsUsed:', json.extensionsUsed || []);
+      console.table((json.images || []).map((im,i)=>({i, mime:im.mimeType||'(unknown)', uri:im.uri?im.uri:'(embedded)'})));
+      window.__glbinfo = { used: json.extensionsUsed||[], images: json.images||[] };
+
+      model = glb.scene;
+      scene.add(model);
+      enableShadows(model);
+      addGroundUnder(model);
+      analyze(model);
+      fit(model);
+      msg('garment.glb を読み込みました');
+      loadAssignFromStorage();
+      applyAssignments();
+      // ★プリセットボタンを初期化
+      initPresetButtons();
+
+      applyPatternByIndex(0);   // デフォルト：パターン1 (A-B-C)
+      setActivePreset(0);
+      generateAllPresetThumbs();
+    },
+    undefined,
+    (err) => {
+      console.error('GLB load failed:', err);
+      msg('GLB読み込みエラー： ' + (err?.message || err));
+      const g = new THREE.BoxGeometry(1, 1.2, 0.5);
+      const m = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.1, roughness: 0.7 });
+      const cube = new THREE.Mesh(g, m);
+      scene.add(cube);
+      targetMats = [cube.material];
+      enableShadows(cube);
+      addGroundUnder(cube);
+      updateMatInfo();
+      loadAssignFromStorage();
+      applyAssignments();
+      msg('assets/garment.glb が無い/読めないのでキューブ表示');
+    }
+  );
+}
+
+// ----- 影用ユーティリティ -----
+function enableShadows(root){
+  root.traverse(o=>{
+    if(o.isMesh){ o.castShadow = true; o.receiveShadow = false; }
+  });
+}
+
+let ground;
+function addGroundUnder(root){
+  if(ground && ground.parent) ground.parent.remove(ground);
+  const box = new THREE.Box3().setFromObject(root);
+  const minY = box.min.y;
+  const g = new THREE.PlaneGeometry(20, 20);
+  const m = new THREE.ShadowMaterial({ opacity: 0.25 });
+  ground = new THREE.Mesh(g, m);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.set(0, minY - 0.002, 0);
+  ground.receiveShadow = true;
+  ground.userData.ground = true;
+  scene.add(ground);
+}
+
+/* ===== ユーティリティ ===== */
+function isSupportedMat(m){
+  return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshBasicMaterial);
+}
+const materialUseCount = new Map();
+function analyze(root){
+  const mats=new Set(); materialUseCount.clear();
+  root.traverse(o=>{
+    if(o.isMesh && o.material){
+      if(Array.isArray(o.material)){
+        o.material.forEach(m=>{ if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }});
+      }else{
+        const m=o.material; if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
+      }
+    }
+  });
+  targetMats = Array.from(mats).filter(isSupportedMat);
+
+  // snapshot originals so unassigned mats (buttons/topstitch etc) can be restored
+  origMatState = new Map();
+  for(const m of targetMats){
+    origMatState.set(m.uuid, {
+      map: m.map || null,
+      color: (m.color && m.color.clone) ? m.color.clone() : null,
+      metalness: (typeof m.metalness==='number') ? m.metalness : undefined,
+      roughness: (typeof m.roughness==='number') ? m.roughness : undefined,
+      normalMap: m.normalMap || null,
+      aoMap: m.aoMap || null,
+      emissiveMap: m.emissiveMap || null,
+      emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
+      alphaMap: m.alphaMap || null,
+      transparent: !!m.transparent,
+      opacity: (typeof m.opacity==='number') ? m.opacity : 1
+    });
+  }
+
+  updateMatInfo();
+    // ★初回セットアップ用：コンソールに material.uuid を出す
+  logMaterialsForZoneSetup();
+
+}
+function updateMatInfo(){
+  const el = $('matinfo');
+  if (el) el.textContent = `適用対象: ${targetMats.length} material(s)`;
+}
+function fit(obj){
+  const box=new THREE.Box3().setFromObject(obj),
+        size=box.getSize(new THREE.Vector3()).length(),
+        center=box.getCenter(new THREE.Vector3());
+  controls.target.copy(center);
+  const dist=size*0.6/Math.tan((Math.PI*camera.fov)/360);
+  camera.position.copy(center.clone().add(new THREE.Vector3(0,size*0.1,dist)));
+  camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
+}
+
+const texLoader = new THREE.TextureLoader();
+let state = {}; // ★動的に作る
+
+function rebuildState(){
+  const next = {};
+  getSlots().forEach(k=>{
+    // 既にあれば引き継ぎ（A/B/Cの画像を保持したい）
+    next[k] = state[k] || { tex:null, url:'' };
+  });
+  state = next;
+}
+
+
+let thumbsGenerated = false;
+function hasAllTextures(){
+  return !!(state.A.tex && state.B.tex && state.C.tex);
+}
+
+// ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
+// ★ key は material.name でも material.uuid でもOK（どちらでもマッチ）
+
+const MAT_ZONE_BY_PATTERN = {
+  'RI-1': {
+    // RI-1 zone mapping (uuid -> zone). Z1=生地A, Z2=生地B, Z3=生地C
+    // NOTE: uuidがA/B両方に出たものは“どちらか片方しか割当できない”ため、いったんZ1に寄せています。
+    //       もしBにしたいなら該当uuidの値をZ2に変更してください。
+
+    // ---- 生地A (Z1) ----
+    '280fc7ec-a129-4352-8333-b10654ddf8d5': 'Z1',
+    'e6ec3827-2650-4dc4-a073-990c86724f1d': 'Z1',
+    '34841282-cc7d-47f1-9aec-b92629591ba9': 'Z1',
+    '782c93b0-5284-4e4f-845e-059bdc573b5c': 'Z1', // A/B両方に出た
+    '838f82ab-53bc-4c2b-ac49-c18ea2a1d136': 'Z1', // A/B両方に出た
+
+    // ---- 生地B (Z2) ----
+    '19777bd4-0fe9-4d0e-84ec-06fa0102e3ed': 'Z2',
+    '27a2c055-20b4-40ae-8c20-886eb8ce6964': 'Z2',
+    'd2e0c058-51d8-43b2-af88-3681344cf9b1': 'Z2',
+    '1f2db43d-bdaa-4a71-a385-a0850747978f': 'Z2',
+    'd2345aae-0fc6-40d5-a69d-c5db69db18d9': 'Z2',
+
+    // 生地C (Z3) は「それ以外の布系マテリアル」に自動適用（下の applyPatternByIndex を参照）
+  },
+  'RI-2': {},
+  'RI-3': {
+    'Nylon_Featherweight_152080': 'Z1',
+    'Nylon_Featherweight Copy 2_152118': 'Z2',
+    'Nylon_Featherweight Copy 1_152099': 'Z3',
+  },
+  'RI-4': {},
+  'RI-5': {},
+  'RISC-Setup': {},
+};
+
+  
+// コンソールで uuid を把握するためのヘルパ（あとで説明する）
+function logMaterialsForZoneSetup() {
+  console.log('--- material list for MAT_ZONE (name / uuid) ---');
+  const rows = targetMats.map((m,i)=>({
+    i,
+    name: m.name || '(no-name)',
+    uuid: m.uuid
+  }));
+  console.table(rows);
+  console.log('MAT_ZONE_BY_PATTERN に入れるキーは name か uuid のどちらでもOKです。');
+  console.log("例:  'MaterialNameHere': 'Z1',  または  '" + (rows[0]?.uuid || 'uuid_here') + "': 'Z1'");
+}
+
+// ===== URLから生地画像を読み込む =====
+function loadTexFromUrlFor(key, url, onDone){
+  if(!state[key]) return;
+  state[key].url=url;
+  state[key].tex = texLoader.load(url, ()=>{
+    prepTexture(state[key].tex);
+    applyAssignments();
+    updateBubblePreviews();
+    msg(`生地${key}を読み込みました`);
+    generateAllPresetThumbs();
+    onDone && onDone(null, url);
+  }, undefined, (err)=>{
+    console.warn('Texture load failed:', url, err);
+    onDone && onDone(err, url);
+  });
+}
+
+// Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
+function loadTexByFabricId(key, id){
+  const urls = [
+    `./assets/fabrics/${id}.jpg`,
+    `./assets/fabrics/${id}_1.jpg`
+  ];
+  const tryLoad = (i)=>{
+    loadTexFromUrlFor(key, urls[i], (err)=>{
+      if(err && i+1 < urls.length){
+        tryLoad(i+1);
+      }else if(err){
+        msg(`生地画像が見つかりません: ${id}`);
+      }
+    });
+  };
+  tryLoad(0);
+}
+
+// ===== URLから渡された生地を A/B/C に自動セット =====
+rebuildState();
+(function initFromBase(){
+  if (!initialFabrics.length) return;
+
+  const slotOrder = getSlots();
+  console.log('BASEから渡ってきた生地ID:', initialFabrics);
+
+  initialFabrics.forEach((id, idx)=>{
+    const slot = slotOrder[idx];
+    if (!slot) return;
+
+    slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
+    loadTexByFabricId(slot, id);
+  });
+})();
+
+const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
+const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
+
+function saveAssignToStorage(){ try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){} }
+function loadAssignFromStorage(){
+  try{
+    const raw = localStorage.getItem(LS_KEYS.assign);
+    if(!raw) return;
+    const obj = JSON.parse(raw);
+    Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
+  }catch(e){}
+}
+
+
+// =====================
+// Debug helpers (Console)
+// =====================
+try{
+  // Always reflect latest (slotFabricIds is reassigned when pattern changes)
+  Object.defineProperty(window, 'slotFabricIds', { configurable:true, get:()=>slotFabricIds });
+  Object.defineProperty(window, 'fvState', { configurable:true, get:()=>state });
+  Object.defineProperty(window, 'fvAssign', { configurable:true, get:()=>assign });
+
+  window.__FV_DEBUG__ = {
+    dump(){
+      const stateView = {};
+      try{
+        Object.keys(state||{}).forEach(k=>{
+          const v = state[k]||{};
+          stateView[k] = { url: v.url||'', hasTex: !!v.tex };
+        });
+      }catch(e){}
+      return {
+        pattern: (typeof currentPatternId!=='undefined') ? currentPatternId : null,
+        glb: (typeof GLB_PATH!=='undefined') ? GLB_PATH : null,
+        slots: (typeof getSlots==='function') ? getSlots() : null,
+        slotFabricIds: (typeof slotFabricIds!=='undefined') ? { ...slotFabricIds } : null,
+        state: stateView,
+        assignCount: Object.keys(assign||{}).length,
+        assign: (typeof assign!=='undefined') ? { ...assign } : null
+      };
+    }
+  };
+  console.log('[FV_DEBUG] window.__FV_DEBUG__ ready. Try: __FV_DEBUG__.dump()');
+}catch(e){
+  console.warn('[FV_DEBUG] init failed:', e);
+}
+
+function prepTexture(t){
+  if(!t) return;
+  if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+}
+function applyAssignments(){
+  targetMats.forEach(m=>{
+    const key = assign[m.uuid];
+    const tex = (key && state[key]) ? state[key].tex : null;
+    if(isSupportedMat(m)){
+      if(!tex || key==='—'){
+        const orig = origMatState.get(m.uuid);
+        if(orig){
+          m.map = orig.map;
+          if(m.color){
+            if(orig.color) m.color.copy(orig.color);
+            else m.color.set(0xffffff);
+          }
+          if(typeof orig.metalness==='number') m.metalness = orig.metalness;
+          if(typeof orig.roughness==='number') m.roughness = orig.roughness;
+          m.normalMap = orig.normalMap;
+          m.aoMap = orig.aoMap;
+          m.emissiveMap = orig.emissiveMap;
+          if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+          m.alphaMap = orig.alphaMap;
+          m.transparent = orig.transparent;
+          m.opacity = orig.opacity;
+        }else{
+          m.map = null;
+          if(m.color) m.color.set(0xffffff);
+        }
+      }else{
+        m.map = tex;
+      }
+      m.needsUpdate = true;
+      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
+      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+    }
+  });
+  saveAssignToStorage();
+  debounceMaybeCapture();
+}
+
+// モデル読み込み後に呼び出したいので、loadModel 成功時に実行する
+
+
+
+
+  
+/* ====== スクショ履歴 ====== */
+const MAX_SHOTS = 6;
+const shotsBox = $('shots');
+let lastShotSig = '';
+let shotDebounce;
+let lastOpWasNone = false;
+
+function currentSignature(){
+  return targetMats.map(m=>{
+    const k = assign[m.uuid];
+    return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
+  }).join('|');
+}
+function allFabricCovered(){
+  if (targetMats.length === 0) return false;
+  return targetMats.every(m=>{
+    const k = assign[m.uuid];
+    return !!(k && k !== '—' && state[k] && state[k].tex);
+  });
+}
+function debounceMaybeCapture(){
+  clearTimeout(shotDebounce);
+  shotDebounce = setTimeout(()=>{
+    if (lastOpWasNone){ lastOpWasNone=false; return; }
+    if (!allFabricCovered()) return;
+    const sig = currentSignature();
+    if(sig===lastShotSig) return;
+    captureShot(sig);
+  }, 250);
+}
+function captureShot(sig){
+  renderer.render(scene,camera);
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+  const img = new Image();
+  img.src = dataUrl;
+  img.title = 'クリックで復元';
+  const snap = { assign: {...assign} };
+  img.dataset.snap = JSON.stringify(snap);
+  img.onclick = ()=>{
+    const s = JSON.parse(img.dataset.snap);
+    Object.keys(assign).forEach(k=>delete assign[k]);
+    Object.assign(assign, s.assign);
+    applyAssignments();
+    msg('履歴から復元しました');
+  };
+  shotsBox.prepend(img);
+  while(shotsBox.children.length>MAX_SHOTS) shotsBox.removeChild(shotsBox.lastChild);
+  lastShotSig = sig;
+}
+
+/* UI: カメラ / 画像読込 / PNG保存 
+$('resetCam').addEventListener('click', ()=>{
+  if(model) fit(model);
+  else { camera.position.set(0,1.2,3); controls.target.set(0,0,0); controls.update(); }
+});
+$('shot').addEventListener('click', ()=>{
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.download = `fabric-viewer_${new Date().toISOString().replace(/[:.]/g,'-')}.png`;
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+});*/
+
+function loadTexFor(key, file){
+  state[key].url = URL.createObjectURL(file);
+  state[key].tex = texLoader.load(state[key].url, ()=>{
+    prepTexture(state[key].tex); applyAssignments();
+    updateBubblePreviews(); msg(`生地${key}を読み込みました`);
+  });
+}
+
+// 生地選択ページの URL（★ あなたの CUSTOM ORDER のURLに変える）
+const FABRIC_SELECT_URL = 'https://riistilo.base.shop/blog';
+
+function goToFabricSelect(slot){
+  // A/B/C で何番目か
+  const order = ['A','B','C'];
+  const idx = order.indexOf(slot);
+
+  // いま使っている生地IDの一覧（nullは除外）
+  const currentList = order
+    .map(s => slotFabricIds[s])
+    .filter(Boolean);
+
+  const params = new URLSearchParams();
+  params.set('slot', slot);                // どのスロットを変更するか（'A' / 'B' / 'C'）
+  params.set('pattern', currentPatternId); // いま見ている型（RI-3 など）
+
+  if (currentList.length){
+    params.set('fabrics', currentList.join(',')); // 例: "S-100,S-101,S-102"
+  }
+
+  // もし「いまのAは選び直しOK、それ以外はグレーアウト」にしたい場合は
+  // index も渡しておくと生地選択側で使える
+  if (idx >= 0) params.set('slotIndex', idx.toString());
+
+  // 生地選択ページへ移動
+  location.href = `${FABRIC_SELECT_URL}?${params.toString()}#custom-order`;
+}
+
+  
+function clearTexture(key){
+  const s = state[key];
+  s.tex = null;
+  s.url = '';
+  updateBubblePreviews();
+  lastOpWasNone = true;
+  applyAssignments();
+  msg(`生地${key}をクリアしました`);
+}
+
+getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
+
+$('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
+$('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
+$('changeC').addEventListener('click', ()=> goToFabricSelect('C'));
+
+/* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let pick = null, overlay = null, pickMatIndex = null;
+const bubble = $('bubble');
+const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') };
+
+function updateBubblePreviews(){
+  getSlots().forEach(k=>{
+    const el = chipEls[k]; if(!el) return;
+    el.style.backgroundImage = state[k].url
+      ? `url(${state[k].url})`
+      : 'none';
+  });
+}
+
+updateBubblePreviews();
+
+const _nm = new THREE.Matrix3();
+function isFrontFacing(hit){
+  if(!hit.face || !hit.object) return true;
+  const n = hit.face.normal.clone().applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize();
+  const camDir = camera.position.clone().sub(hit.point).normalize();
+  return n.dot(camDir) > 0.15;
+}
+function showHighlight(mesh){
+  hideHighlight();
+  if(!mesh || !mesh.geometry) return;
+  const mat = new THREE.MeshBasicMaterial({color:0xff6b81, transparent:true, opacity:0.35, depthTest:false, depthWrite:false});
+  overlay = new THREE.Mesh(mesh.geometry, mat);
+  overlay.renderOrder = 9999; mesh.add(overlay);
+}
+function hideHighlight(){ if(overlay && overlay.parent){ overlay.parent.remove(overlay); } overlay = null; }
+function hideBubble(){ bubble.style.display='none'; }
+function setBubbleScreenPos(world){
+  const p = world.clone().project(camera);
+  const x = (p.x * .5 + .5) * canvas.clientWidth;
+  const y = ( -p.y * .5 + .5) * canvas.clientHeight;
+  bubble.style.left = `${x}px`; bubble.style.top  = `${y}px`;
+}
+function onCanvasClick(ev){
+  const r = canvas.getBoundingClientRect();
+  mouse.x = ((ev.clientX - r.left)/r.width) * 2 - 1;
+  mouse.y = -((ev.clientY - r.top)/r.height) * 2 + 1;
+  ray.setFromCamera(mouse, camera);
+  const targets = []; scene.traverse(o=>{ if(o.isMesh && !o.userData?.ground) targets.push(o); });
+  const hits = ray.intersectObjects(targets, true);
+  const hit = hits.find(h => h.object && h.object.material && isFrontFacing(h));
+  if(!hit){ pick=null; pickMatIndex=null; hideHighlight(); hideBubble(); return; }
+  pick = hit.object;
+  pickMatIndex = (Array.isArray(pick.material) && hit.face && typeof hit.face.materialIndex==='number') ? hit.face.materialIndex : null;
+  showHighlight(pick);
+  const wp = hit.point.clone().add(new THREE.Vector3(0, 0.02, 0));
+  setBubbleScreenPos(wp); bubble.style.display='block'; controls.update();
+}
+canvas.addEventListener('pointerdown', onCanvasClick);
+
+
+
+//これでIDがわかる
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const mouse = {
+    x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    y: -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+  };
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(scene.children, true);
+
+  const hit = hits.find(h => h.object && h.object.material);
+  if (!hit) return;
+
+  const m = hit.object.material;
+  const mats = Array.isArray(m) ? m : [m];
+
+  console.log('[HIT materials]', mats.map(mm => ({
+    name: mm.name, uuid: mm.uuid, color: mm.color?.getHexString?.()
+  })));
+});
+//ここまで
+
+
+
+function ensureUniqueMaterialOnMesh(mesh, idx){
+  if(Array.isArray(mesh.material)){
+    const old = mesh.material[idx]; if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone(); mesh.material[idx] = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone); return clone;
+    } return old;
+  }else{
+    const old = mesh.material; if(!old) return null;
+    const count = materialUseCount.get(old.uuid)||0;
+    if(count > 1){
+      const clone = old.clone(); mesh.material = clone;
+      materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
+      if(isSupportedMat(clone)) targetMats.push(clone); return clone;
+    } return old;
+  }
+}
+function assignToSelected(key){
+  if(!pick || !pick.material) return;
+  let mat = null;
+  if(Array.isArray(pick.material)){
+    const idx = (pickMatIndex!=null) ? pickMatIndex : 0;
+    mat = ensureUniqueMaterialOnMesh(pick, idx);
+  }else{
+    mat = ensureUniqueMaterialOnMesh(pick, 0);
+  }
+  if(!mat) return;
+
+    console.log(
+    '[ZONE SETUP]',
+    'material name:', mat.name || '(no-name)',
+    'uuid:', mat.uuid,
+    'assigned fabric:', key
+  );
+  
+  assign[mat.uuid] = key;
+  lastOpWasNone = (key === '—');
+  applyAssignments();
+}
+chipEls.A.onclick=()=>assignToSelected('A');
+chipEls.B.onclick=()=>assignToSelected('B');
+chipEls.C.onclick=()=>assignToSelected('C');
+chipEls.None.onclick=()=>assignToSelected('—');
+
+
+// ===== 6パターン自動切替（ZONES × A/B/C） =====
+
+// ゾーン1/2/3 に対して A/B/C をどう当てるか
+const PATTERN_PERMS = [
+  { label: 'パターン1 (A-B-C)', Z1: 'A', Z2: 'B', Z3: 'C' },
+  { label: 'パターン2 (A-C-B)', Z1: 'A', Z2: 'C', Z3: 'B' },
+  { label: 'パターン3 (B-A-C)', Z1: 'B', Z2: 'A', Z3: 'C' },
+  { label: 'パターン4 (B-C-A)', Z1: 'B', Z2: 'C', Z3: 'A' },
+  { label: 'パターン5 (C-A-B)', Z1: 'C', Z2: 'A', Z3: 'B' },
+  { label: 'パターン6 (C-B-A)', Z1: 'C', Z2: 'B', Z3: 'A' },
+];
+
+/**
+ * 指定パターン番号 (0〜5) を適用
+ */
+function applyPatternByIndex(index) {
+  const perm = PATTERN_PERMS[index];
+  if (!perm) return;
+
+  Object.keys(assign).forEach(k => { delete assign[k]; });
+
+  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+
+  targetMats.forEach(m => {
+    let zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name];
+    // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
+    if(!zone){
+      const n = (m.name || '');
+      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n);
+      if(isFabricLike) zone = 'Z3';
+    }
+    if (!zone) { assign[m.uuid] = '—'; return; }
+    const slot = perm[zone];
+    assign[m.uuid] = slot || '—';
+  });
+
+  applyAssignments();
+  msg(perm.label + ' を適用しました');
+}
+
+
+// サムネ用のカメラ位置（2枚目スクショっぽい斜めから）
+const THUMB_CAM_POS    = new THREE.Vector3(1.4, 1.6, 3.0);
+const THUMB_CAM_TARGET = new THREE.Vector3(0, 1.2, 0);
+
+function capturePresetThumb(index){
+  if (!model) return;                         // モデルまだ読み込み前なら何もしない
+  const card = presetsEl.children[index];
+  if (!card) return;
+  const thumbEl = card.querySelector('.presetThumb');
+  if (!thumbEl) return;
+
+  // いまのカメラ状態を退避
+  const oldPos    = camera.position.clone();
+  const oldTarget = controls.target.clone();
+
+  // サムネ用ポーズに変更
+  camera.position.copy(THUMB_CAM_POS);
+  controls.target.copy(THUMB_CAM_TARGET);
+  controls.update();
+
+  // 1枚レンダリングしてデータURL取得
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+
+  // カードの背景に貼る
+  thumbEl.style.backgroundImage = `url(${url})`;
+
+  // カメラ状態を元に戻す
+  camera.position.copy(oldPos);
+  controls.target.copy(oldTarget);
+  controls.update();
+}
+
+// A/B/C が全部入っていてモデルも読み込み済みなら、6パターン分のサムネを一気に作る
+function generateAllPresetThumbs(){
+  if (!model || !hasAllTextures() || thumbsGenerated) return;
+  thumbsGenerated = true;
+
+  // 現在の割り当てをバックアップ
+  const backupAssign = { ...assign };
+
+  PATTERN_PERMS.forEach((p, idx) => {
+    applyPatternByIndex(idx);   // パターン適用
+    capturePresetThumb(idx);    // サムネ撮影
+  });
+
+  // 割り当てを元に戻す
+  Object.keys(assign).forEach(k => delete assign[k]);
+  Object.assign(assign, backupAssign);
+  applyAssignments();
+
+  // デフォルトはパターン1を選択状態にしておく
+  setActivePreset(0);
+}
+
+// ===== 下部のカードを実際に作る =====
+const presetsEl = document.getElementById('presets');
+let activePresetIndex = -1;
+
+function setActivePreset(idx){
+  activePresetIndex = idx;
+  Array.from(presetsEl.children).forEach((el, i)=>{
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+function initPresetButtons(){
+  // 一旦クリア
+  presetsEl.innerHTML = '';
+
+  PATTERN_PERMS.forEach((p, idx)=>{
+    const btn = document.createElement('button');
+    btn.className = 'presetCard';
+    btn.innerHTML = `
+      <div class="presetThumb"></div>
+      <div class="presetLabel">${p.label}</div>
+    `;
+
+    btn.addEventListener('click', ()=>{
+      // パターン適用（本体のジャケットの模様が切り替わる）
+      applyPatternByIndex(idx);
+      setActivePreset(idx);
+
+      // 今の状態でサムネを撮って、このカードに貼る
+      capturePresetThumb(idx);
+    });
+
+    presetsEl.appendChild(btn);
+  });
+}
+
+
+
+
+/* ループ */
+function resize(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+}
+function loop(){
+  resize(); controls.update(); renderer.render(scene,camera);
+  if(pick && bubble.style.display!=='none'){
+    const center = new THREE.Box3().setFromObject(pick).getCenter(new THREE.Vector3());
+    setBubbleScreenPos(center);
+  }
+  requestAnimationFrame(loop);
+} loop();
+
+/* メッセージ */
+let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+
+/* 表示リセット */
+$('resetAll').addEventListener('click', ()=>{
+  Object.keys(assign).forEach(k=>assign[k]='—');
+  targetMats.forEach(m=>{ if(m){ m.map = null; if(m.color) m.color.set(0xffffff); m.needsUpdate = true; } });
+  saveAssignToStorage();
+  msg('表示を初期化しました（白・割り当てなし）');
+});
+
+/* ===== 型選択 初期化 ===== */
+(function initPatternSelect(){
+  const ri3 = PATTERNS['RI-3'];
+  const thumbEl = $('thumb-RI3');
+
+  if (ri3?.thumb && thumbEl){
+    const img = new Image();
+    img.onload  = ()=> { thumbEl.style.backgroundImage = `url(${ri3.thumb})`; };
+    img.onerror = ()=> { makeThumbFromGLB(ri3.glb, thumbEl); };
+    img.src = ri3.thumb;
+  }
+
+  const grid = $('patternGrid');
+  if (!grid) return;
+
+  grid.addEventListener('click', (e)=>{
+    const card = e.target.closest('.patternCard'); if(!card) return;
+    const id = card.dataset.id;       // "RI-3" とか
+    const def = PATTERNS[id];
+    if (!def){ msg(`${id} は準備中です`); return; }
+
+    GLB_PATH = def.glb;
+    currentPatternId = id;
+
+    // ★追加：型が変わったのでスロット関連を更新
+    rebuildState();
+    slotFabricIds = {};
+    getSlots().forEach((k)=> slotFabricIds[k] = null);
+
+    document.body.classList.remove('selecting');
+    loadModel(GLB_PATH);
+  });
+})();
+// GLBから2Dサムネを生成（フォールバック）
+function makeThumbFromGLB(glbPath, targetEl){
+  const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+  const W=360, H=270; r.setSize(W,H,false); r.outputColorSpace = THREE.SRGBColorSpace;
+  const sc = new THREE.Scene(); sc.background = new THREE.Color(0xffffff);
+  const cam = new THREE.PerspectiveCamera(20, W/H, 0.1, 100);
+  sc.add(new THREE.HemisphereLight(0xffffff,0x223,0.6));
+  const dl  = new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(2,3,5); sc.add(dl);
+
+  const ld = new THREE.GLTFLoader();
+  ld.load(glbPath, (glb)=>{
+    const obj = glb.scene; sc.add(obj);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    obj.position.sub(center);
+    const radius = Math.max(size.x, size.y, size.z) * 0.6;
+    cam.position.set(0, 0.1*size.y, radius*3.0);
+    cam.lookAt(0,0,0); cam.updateProjectionMatrix();
+    r.render(sc, cam);
+    targetEl.style.backgroundImage = `url(${r.domElement.toDataURL('image/png')})`;
+    r.dispose();
+  }, undefined, ()=>{});
+}
+
+
+document.getElementById('backHomeBtn').addEventListener('click', function () {
+  window.location.href = 'https://riistilo.base.shop/';
+});
+
+  
+</script>
+</body></html>
