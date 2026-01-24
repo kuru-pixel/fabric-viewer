@@ -310,11 +310,13 @@ function getSlots(){
 }
 
 // URL から渡ってきた生地ID（スロット数に合わせる）
+const EMPTY = "-";
 const initialFabrics = fabricsParam
-  ? fabricsParam.split(',').map(s => {
-      const t = (s ?? '').trim().toUpperCase();
-      return (!t || t === '-') ? null : t;
-    }).slice(0, getSlots().length)
+  ? fabricsParam
+      .split(',')
+      .map(s => String(s || "").trim())
+      .slice(0, getSlots().length)
+      .map(s => (!s || s === EMPTY || s.toLowerCase() === "null") ? null : s.toUpperCase())
   : [];
 
 // 各スロットに今どの生地IDが入っているか
@@ -574,17 +576,22 @@ function loadTexFromUrlFor(key, url, onDone){
 
 // Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
 function loadTexByFabricId(key, id){
+  // ★追加：id整形（"S-140_1" みたいに来ても "S-140" に戻す）
+  id = String(id || "").trim();
+  id = id.replace(/_([0-9]+)$/i, "");     // ← "_1" "_2" を剥がす
+  id = id.toUpperCase();
+
+  // ★変更：_2 → _1 → 通常 の順で試す（"S-140.jpg" は最後）
   const urls = [
+    `./assets/fabrics/${id}_2.jpg`,
+    `./assets/fabrics/${id}_1.jpg`,
     `./assets/fabrics/${id}.jpg`,
-    `./assets/fabrics/${id}_1.jpg`
   ];
+
   const tryLoad = (i)=>{
     loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err && i+1 < urls.length){
-        tryLoad(i+1);
-      }else if(err){
-        msg(`生地画像が見つかりません: ${id}`);
-      }
+      if(err && i+1 < urls.length) return tryLoad(i+1);
+      if(err) msg(`生地画像が見つかりません: ${id}`);
     });
   };
   tryLoad(0);
@@ -785,10 +792,9 @@ function goToFabricSelect(slot){
   const idx = order.indexOf(slot);
 
   // いま使っている生地IDの一覧（nullは除外）
-const currentList = order.map(s => {
-  const v = slotFabricIds[s];
-  return (v && String(v).trim()) ? String(v).trim().toUpperCase() : '-';
-});
+const EMPTY = "-";
+const currentList = order.map(s => slotFabricIds[s] || EMPTY);
+
 
   const params = new URLSearchParams();
   params.set('slot', slot);                // どのスロットを変更するか（'A' / 'B' / 'C'）
