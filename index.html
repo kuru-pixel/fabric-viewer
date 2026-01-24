@@ -759,6 +759,31 @@ function onCanvasClick(ev){
 }
 canvas.addEventListener('pointerdown', onCanvasClick);
 
+//一時的に入れる。これでIDがわかる
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const mouse = {
+    x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    y: -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+  };
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(scene.children, true);
+
+  const hit = hits.find(h => h.object && h.object.material);
+  if (!hit) return;
+
+  const m = hit.object.material;
+  const mats = Array.isArray(m) ? m : [m];
+
+  console.log('[HIT materials]', mats.map(mm => ({
+    name: mm.name, uuid: mm.uuid, color: mm.color?.getHexString?.()
+  })));
+});
+//一時的に入れる
+  
+
 function ensureUniqueMaterialOnMesh(mesh, idx){
   if(Array.isArray(mesh.material)){
     const old = mesh.material[idx]; if(!old) return null;
