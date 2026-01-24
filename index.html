@@ -573,35 +573,22 @@ function loadTexFromUrlFor(key, url, onDone){
 function loadTexByFabricId(key, id){
   const urls = [
     `./assets/fabrics/${id}.jpg`,
-    `./assets/fabrics/${id}_2.jpg`,
-    `./assets/fabrics/${id}_1.jpg`,
+    `./assets/fabrics/${id}_1.jpg`
   ];
-
   const tryLoad = (i)=>{
     loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err && i+1 < urls.length) return tryLoad(i+1);
-      if(err) msg(`生地画像が見つかりません: ${id}`);
+      if(err && i+1 < urls.length){
+        tryLoad(i+1);
+      }else if(err){
+        msg(`生地画像が見つかりません: ${id}`);
+      }
     });
   };
   tryLoad(0);
 }
 
-
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
-
-// DEBUG helper for DevTools
-window.__FV_DEBUG__ = {
-  get slotFabricIds(){ return slotFabricIds; },
-  get state(){ return state; },
-  get assign(){ return assign; },
-  dump(){ console.log({ slotFabricIds, state, assign }); },
-};
-console.log("__FV_DEBUG__ ready", window.__FV_DEBUG__);
-
-
-
-
 (function initFromBase(){
   if (!initialFabrics.length) return;
 
@@ -628,6 +615,41 @@ function loadAssignFromStorage(){
     const obj = JSON.parse(raw);
     Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
   }catch(e){}
+}
+
+
+// =====================
+// Debug helpers (Console)
+// =====================
+try{
+  // Always reflect latest (slotFabricIds is reassigned when pattern changes)
+  Object.defineProperty(window, 'slotFabricIds', { configurable:true, get:()=>slotFabricIds });
+  Object.defineProperty(window, 'fvState', { configurable:true, get:()=>state });
+  Object.defineProperty(window, 'fvAssign', { configurable:true, get:()=>assign });
+
+  window.__FV_DEBUG__ = {
+    dump(){
+      const stateView = {};
+      try{
+        Object.keys(state||{}).forEach(k=>{
+          const v = state[k]||{};
+          stateView[k] = { url: v.url||'', hasTex: !!v.tex };
+        });
+      }catch(e){}
+      return {
+        pattern: (typeof currentPatternId!=='undefined') ? currentPatternId : null,
+        glb: (typeof GLB_PATH!=='undefined') ? GLB_PATH : null,
+        slots: (typeof getSlots==='function') ? getSlots() : null,
+        slotFabricIds: (typeof slotFabricIds!=='undefined') ? { ...slotFabricIds } : null,
+        state: stateView,
+        assignCount: Object.keys(assign||{}).length,
+        assign: (typeof assign!=='undefined') ? { ...assign } : null
+      };
+    }
+  };
+  console.log('[FV_DEBUG] window.__FV_DEBUG__ ready. Try: __FV_DEBUG__.dump()');
+}catch(e){
+  console.warn('[FV_DEBUG] init failed:', e);
 }
 
 function prepTexture(t){
@@ -853,6 +875,8 @@ function onCanvasClick(ev){
   setBubbleScreenPos(wp); bubble.style.display='block'; controls.update();
 }
 canvas.addEventListener('pointerdown', onCanvasClick);
+
+
 
 //これでIDがわかる
   renderer.domElement.addEventListener('pointerdown', (e) => {
