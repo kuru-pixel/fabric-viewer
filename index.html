@@ -311,7 +311,10 @@ function getSlots(){
 
 // URL から渡ってきた生地ID（スロット数に合わせる）
 const initialFabrics = fabricsParam
-  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, getSlots().length)
+  ? fabricsParam.split(',').map(s => {
+      const t = (s ?? '').trim().toUpperCase();
+      return (!t || t === '-') ? null : t;
+    }).slice(0, getSlots().length)
   : [];
 
 // 各スロットに今どの生地IDが入っているか
@@ -782,9 +785,10 @@ function goToFabricSelect(slot){
   const idx = order.indexOf(slot);
 
   // いま使っている生地IDの一覧（nullは除外）
-  const currentList = order
-    .map(s => slotFabricIds[s])
-    .filter(Boolean);
+const currentList = order.map(s => {
+  const v = slotFabricIds[s];
+  return (v && String(v).trim()) ? String(v).trim().toUpperCase() : '-';
+});
 
   const params = new URLSearchParams();
   params.set('slot', slot);                // どのスロットを変更するか（'A' / 'B' / 'C'）
