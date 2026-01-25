@@ -981,7 +981,7 @@ function applyPatternByIndex(index) {
     // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
     if(!zone){
       const n = (m.name || '');
-      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n) || /Cotton_50s_Poplin/i.test(n);
+      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n);
       if(isFabricLike) zone = 'Z3';
     }
     if (!zone) { assign[m.uuid] = '—'; return; }
