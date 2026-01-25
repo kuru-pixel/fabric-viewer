@@ -310,8 +310,13 @@ function getSlots(){
 }
 
 // URL から渡ってきた生地ID（スロット数に合わせる）
+const EMPTY = "-";
 const initialFabrics = fabricsParam
-  ? fabricsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, getSlots().length)
+  ? fabricsParam
+      .split(',')
+      .map(s => String(s || "").trim())
+      .slice(0, getSlots().length)
+      .map(s => (!s || s === EMPTY || s.toLowerCase() === "null") ? null : s.toUpperCase())
   : [];
 
 // 各スロットに今どの生地IDが入っているか
@@ -507,27 +512,16 @@ function hasAllTextures(){
 
 const MAT_ZONE_BY_PATTERN = {
   'RI-1': {
-    // RI-1 zone mapping (uuid -> zone). Z1=生地A, Z2=生地B, Z3=生地C
-    // NOTE: uuidがA/B両方に出たものは“どちらか片方しか割当できない”ため、いったんZ1に寄せています。
-    //       もしBにしたいなら該当uuidの値をZ2に変更してください。
-
-    // ---- 生地A (Z1) ----
-    '280fc7ec-a129-4352-8333-b10654ddf8d5': 'Z1',
-    'e6ec3827-2650-4dc4-a073-990c86724f1d': 'Z1',
-    '34841282-cc7d-47f1-9aec-b92629591ba9': 'Z1',
-    '782c93b0-5284-4e4f-845e-059bdc573b5c': 'Z1', // A/B両方に出た
-    '838f82ab-53bc-4c2b-ac49-c18ea2a1d136': 'Z1', // A/B両方に出た
-
-    // ---- 生地B (Z2) ----
-    '19777bd4-0fe9-4d0e-84ec-06fa0102e3ed': 'Z2',
-    '27a2c055-20b4-40ae-8c20-886eb8ce6964': 'Z2',
-    'd2e0c058-51d8-43b2-af88-3681344cf9b1': 'Z2',
-    '1f2db43d-bdaa-4a71-a385-a0850747978f': 'Z2',
-    'd2345aae-0fc6-40d5-a69d-c5db69db18d9': 'Z2',
-
+    'Nylon_Featherweight Copy 1 コピー 1_596028': 'Z1',
+    'Nylon_Featherweight Copy 1_2705': 'Z2',
+    'Nylon_Featherweight_2696': 'Z3',
     // 生地C (Z3) は「それ以外の布系マテリアル」に自動適用（下の applyPatternByIndex を参照）
   },
-  'RI-2': {},
+  'RI-2':  {
+    'Cotton_50s_Poplin_2829': 'Z1',
+    'Cotton_50s_Poplin_2822': 'Z2',
+    'Cotton_50s_Poplin_2813': 'Z3',
+  },
   'RI-3': {
     'Nylon_Featherweight_152080': 'Z1',
     'Nylon_Featherweight Copy 2_152118': 'Z2',
@@ -571,17 +565,22 @@ function loadTexFromUrlFor(key, url, onDone){
 
 // Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
 function loadTexByFabricId(key, id){
+  // ★追加：id整形（"S-140_1" みたいに来ても "S-140" に戻す）
+  id = String(id || "").trim();
+  id = id.replace(/_([0-9]+)$/i, "");     // ← "_1" "_2" を剥がす
+  id = id.toUpperCase();
+
+  // ★変更：_2 → _1 → 通常 の順で試す（"S-140.jpg" は最後）
   const urls = [
+    `./assets/fabrics/${id}_2.jpg`,
+    `./assets/fabrics/${id}_1.jpg`,
     `./assets/fabrics/${id}.jpg`,
-    `./assets/fabrics/${id}_1.jpg`
   ];
+
   const tryLoad = (i)=>{
     loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err && i+1 < urls.length){
-        tryLoad(i+1);
-      }else if(err){
-        msg(`生地画像が見つかりません: ${id}`);
-      }
+      if(err && i+1 < urls.length) return tryLoad(i+1);
+      if(err) msg(`生地画像が見つかりません: ${id}`);
     });
   };
   tryLoad(0);
@@ -782,9 +781,9 @@ function goToFabricSelect(slot){
   const idx = order.indexOf(slot);
 
   // いま使っている生地IDの一覧（nullは除外）
-  const currentList = order
-    .map(s => slotFabricIds[s])
-    .filter(Boolean);
+const EMPTY = "-";
+const currentList = order.map(s => slotFabricIds[s] || EMPTY);
+
 
   const params = new URLSearchParams();
   params.set('slot', slot);                // どのスロットを変更するか（'A' / 'B' / 'C'）
@@ -807,6 +806,8 @@ function clearTexture(key){
   const s = state[key];
   s.tex = null;
   s.url = '';
+  // ★追加：スロットの生地IDもクリア
+  if (slotFabricIds && (key in slotFabricIds)) slotFabricIds[key] = null;
   updateBubblePreviews();
   lastOpWasNone = true;
   applyAssignments();
@@ -877,7 +878,7 @@ function onCanvasClick(ev){
 canvas.addEventListener('pointerdown', onCanvasClick);
 
 
-/*
+
 //これでIDがわかる
   renderer.domElement.addEventListener('pointerdown', (e) => {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -901,7 +902,7 @@ canvas.addEventListener('pointerdown', onCanvasClick);
   })));
 });
 //ここまで
-*/
+
 
 
 function ensureUniqueMaterialOnMesh(mesh, idx){
@@ -910,6 +911,7 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
     const count = materialUseCount.get(old.uuid)||0;
     if(count > 1){
       const clone = old.clone(); mesh.material[idx] = clone;
+      
       materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
       if(isSupportedMat(clone)) targetMats.push(clone); return clone;
     } return old;
@@ -986,6 +988,25 @@ function applyPatternByIndex(index) {
     const slot = perm[zone];
     assign[m.uuid] = slot || '—';
   });
+
+//一旦テストで入れてる
+  if (currentPatternId === 'RI-2') {
+  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+  console.table(targetMats.map(m => {
+    const zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name] || '';
+    const slot = zone ? (PATTERN_PERMS[index]?.[zone] || '') : '';
+    return {
+      matName: m.name,
+      zone,
+      slot,
+      fabricId: slot ? (slotFabricIds?.[slot] ?? null) : null,
+    };
+  }));
+}
+//ここまで
+
+
+  
 
   applyAssignments();
   msg(perm.label + ' を適用しました');
@@ -1135,13 +1156,19 @@ $('resetAll').addEventListener('click', ()=>{
     GLB_PATH = def.glb;
     currentPatternId = id;
 
-    // ★追加：型が変わったのでスロット関連を更新
-    rebuildState();
-    slotFabricIds = {};
-    getSlots().forEach((k)=> slotFabricIds[k] = null);
+    // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+// ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+const keepIds = { ...slotFabricIds };   // ← 先に退避（重要）
 
-    document.body.classList.remove('selecting');
-    loadModel(GLB_PATH);
+rebuildState();
+
+const nextIds = {};
+getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; }); // ← keepIds から復元
+slotFabricIds = nextIds;
+
+document.body.classList.remove('selecting');
+loadModel(GLB_PATH);
+
   });
 })();
 // GLBから2Dサムネを生成（フォールバック）
