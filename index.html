@@ -981,7 +981,11 @@ function applyPatternByIndex(index) {
     // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
     if(!zone){
       const n = (m.name || '');
-      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n);
+      const isFabricLike =
+  (currentPatternId === 'RI-2')
+    ? /Cotton_50s_Poplin|Poplin|Cotton/i.test(n)
+    : /Nylon[_ ]Featherweight|Featherweight/i.test(n);
+
       if(isFabricLike) zone = 'Z3';
     }
     if (!zone) { assign[m.uuid] = '—'; return; }
@@ -1158,7 +1162,7 @@ $('resetAll').addEventListener('click', ()=>{
 
     // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
 // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-const keepIds = { ...slotFabricIds };   // ← 先に退避（重要）
+const keepIds = { ...slotFabricIds };  // ← 先に退避（重要）
 
 rebuildState();
 
