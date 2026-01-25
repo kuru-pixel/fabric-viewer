@@ -563,28 +563,40 @@ function loadTexFromUrlFor(key, url, onDone){
   });
 }
 
-// Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
+// Allow fallback for fabrics stored as "<id>_1.jpg" etc.
 function loadTexByFabricId(key, id){
-  // ★追加：id整形（"S-140_1" みたいに来ても "S-140" に戻す）
   id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, "");     // ← "_1" "_2" を剥がす
+  id = id.replace(/_([0-9]+)$/i, "");   // "_1" "_2" を剥がす
   id = id.toUpperCase();
 
-  // ★変更：_2 → _1 → 通常 の順で試す（"S-140.jpg" は最後）
-  const urls = [
-    `./assets/fabrics/${id}_2.jpg`,
-    `./assets/fabrics/${id}_1.jpg`,
-    `./assets/fabrics/${id}.jpg`,
-  ];
+  // _2 → _1 → 通常 の順
+  const stems = [`${id}_2`, `${id}_1`, `${id}`];
+
+  // ★追加：拡張子/大文字小文字もフォールバック（GitHub Pagesは大小区別される）
+  const exts = ["jpg", "JPG", "jpeg", "png", "webp"];
+
+  const urls = [];
+  for(const s of stems){
+    for(const ext of exts){
+      urls.push(`./assets/fabrics/${s}.${ext}`);
+    }
+  }
 
   const tryLoad = (i)=>{
+    if(i >= urls.length){
+      msg(`生地画像が見つかりません: ${id}`);
+      return;
+    }
     loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err && i+1 < urls.length) return tryLoad(i+1);
-      if(err) msg(`生地画像が見つかりません: ${id}`);
+      if(err) return tryLoad(i+1);
+      // 成功した実URLをログに残す（あとで整理しやすい）
+      console.log("[FABRIC OK]", key, urls[i]);
     });
   };
+
   tryLoad(0);
 }
+
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
