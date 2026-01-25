@@ -989,6 +989,11 @@ function applyPatternByIndex(index) {
   const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
   const __missingMatNames = new Set();
 
+
+  window.__FV_getMissingMatNames = () => Array.from(__missingMatNames);
+
+  
+
   function __resolveZoneForMat(m){
     if(!m) return null;
 
