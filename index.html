@@ -1026,6 +1026,17 @@ function applyPatternByIndex(index) {
     assign[m.uuid] = slot || '—';
   });
 
+  if (currentPatternId === 'RI-2') {
+  // “生地ゾーンに入れない”想定の素材はここで除外（warn出さない）
+  const IGNORE = new Set([
+    'Default Button_2835',
+  ]);
+  for (const n of Array.from(__missingMatNames)) {
+    if (IGNORE.has(n)) __missingMatNames.delete(n);
+  }
+}
+
+
   if(currentPatternId === 'RI-2' && __missingMatNames.size){
     console.warn('[RI-2] MAT_ZONE_BY_PATTERN に未登録の material.name（追加して）:', Array.from(__missingMatNames));
   }
