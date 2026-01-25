@@ -1138,13 +1138,18 @@ $('resetAll').addEventListener('click', ()=>{
     currentPatternId = id;
 
     // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-    rebuildState();
-    const nextIds = {};
-    getSlots().forEach((k)=>{ nextIds[k] = slotFabricIds[k] || null; });
-    slotFabricIds = nextIds;
+// ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+const keepIds = { ...slotFabricIds };   // ← 先に退避（重要）
 
-    document.body.classList.remove('selecting');
-    loadModel(GLB_PATH);
+rebuildState();
+
+const nextIds = {};
+getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; }); // ← keepIds から復元
+slotFabricIds = nextIds;
+
+document.body.classList.remove('selecting');
+loadModel(GLB_PATH);
+
   });
 })();
 // GLBから2Dサムネを生成（フォールバック）
