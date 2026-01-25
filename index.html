@@ -1026,13 +1026,11 @@ function applyPatternByIndex(index) {
     assign[m.uuid] = slot || '—';
   });
 
-  if (currentPatternId === 'RI-2') {
-  // “生地ゾーンに入れない”想定の素材はここで除外（warn出さない）
-  const IGNORE = new Set([
-    'Default Button_2835',
-  ]);
-  for (const n of Array.from(__missingMatNames)) {
-    if (IGNORE.has(n)) __missingMatNames.delete(n);
+if (currentPatternId === 'RI-2') {
+  const IGNORE = new Set(['Default Button_2835']);
+  if (typeof __missingMatNames !== 'undefined') {
+    for (const n of Array.from(__missingMatNames)) {
+      if (IGNORE.has(n)) __missingMatNames.delete(n);
   }
 }
 
