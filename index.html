@@ -975,39 +975,61 @@ function applyPatternByIndex(index) {
   Object.keys(assign).forEach(k => { delete assign[k]; });
 
   const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+  const __missingMatNames = new Set();
+
+  function __resolveZoneForMat(m){
+    if(!m) return null;
+
+    // uuid はリロードで変わり得るので、まず name を優先（uuidも一応拾う）
+    if(MAT_ZONE[m.uuid]) return MAT_ZONE[m.uuid];
+
+    const raw = (m.name || '');
+    if(MAT_ZONE[raw]) return MAT_ZONE[raw];
+
+    const n = String(raw).trim();
+    if(MAT_ZONE[n]) return MAT_ZONE[n];
+
+    // ".001" / " Copy ..." などの揺れを落として再トライ
+    const base = n.replace(/\.(\d+)$/, '').replace(/\s+Copy.*$/i, '').trim();
+    if(MAT_ZONE[base]) return MAT_ZONE[base];
+
+    // プレフィックス一致（末尾に .001 等が付くケース）
+    for(const k in MAT_ZONE){
+      if(!k) continue;
+      if(n === k || n.startsWith(k)) return MAT_ZONE[k];
+    }
+    for(const k in MAT_ZONE){
+      if(!k) continue;
+      if(base === k || base.startsWith(k)) return MAT_ZONE[k];
+    }
+    return null;
+  }
 
   targetMats.forEach(m => {
-    let zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name];
-    // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
+    let zone = __resolveZoneForMat(m);
+
+    // 自動Z3は RI-1 だけに限定（RI-2でやると “全部Z3” になりやすい）
     if(!zone){
       const n = (m.name || '');
-      const isFabricLike =
-  (currentPatternId === 'RI-2')
-    ? /Cotton_50s_Poplin|Poplin|Cotton/i.test(n)
-    : /Nylon[_ ]Featherweight|Featherweight/i.test(n);
-
+      const allowAutoZ3 = (currentPatternId === 'RI-1');
+      const isFabricLike = allowAutoZ3 && (/Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n));
       if(isFabricLike) zone = 'Z3';
     }
-    if (!zone) { assign[m.uuid] = '—'; return; }
+
+    if (!zone) {
+      assign[m.uuid] = '—';
+      if(currentPatternId === 'RI-2') __missingMatNames.add(m.name || '(no-name)');
+      return;
+    }
+
     const slot = perm[zone];
     assign[m.uuid] = slot || '—';
   });
 
-//一旦テストで入れてる
-  if (currentPatternId === 'RI-2') {
-  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
-  console.table(targetMats.map(m => {
-    const zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name] || '';
-    const slot = zone ? (PATTERN_PERMS[index]?.[zone] || '') : '';
-    return {
-      matName: m.name,
-      zone,
-      slot,
-      fabricId: slot ? (slotFabricIds?.[slot] ?? null) : null,
-    };
-  }));
-}
-//ここまで
+  if(currentPatternId === 'RI-2' && __missingMatNames.size){
+    console.warn('[RI-2] MAT_ZONE_BY_PATTERN に未登録の material.name（追加して）:', Array.from(__missingMatNames));
+  }
+
 
 
   
