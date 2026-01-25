@@ -1031,8 +1031,10 @@ if (currentPatternId === 'RI-2') {
   if (typeof __missingMatNames !== 'undefined') {
     for (const n of Array.from(__missingMatNames)) {
       if (IGNORE.has(n)) __missingMatNames.delete(n);
+    }
   }
 }
+
 
 
   if(currentPatternId === 'RI-2' && __missingMatNames.size){
