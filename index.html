@@ -658,6 +658,114 @@ try{
       };
     }
   };
+
+
+
+//デバッグ用
+// =====================
+// Debug: find meshes by material.name
+// =====================
+(function attachFindMeshesByMatNames(){
+  function getObjLabel(o){
+    if(!o) return '(null)';
+    if(o.name && String(o.name).trim()) return String(o.name).trim();
+    if(o.type && String(o.type).trim()) return String(o.type).trim();
+    return '(no-name)';
+  }
+
+  function getPathFromModel(o){
+    const parts = [];
+    let cur = o;
+    while(cur){
+      parts.unshift(getObjLabel(cur));
+      if(typeof model !== 'undefined' && model && cur === model) break;
+      cur = cur.parent;
+      if(!cur) break;
+    }
+    return parts.join(' / ');
+  }
+
+  function findMeshesByMatNames(names){
+    const wanted = new Set((names || []).map(n => String(n || '').trim()).filter(Boolean));
+    const rows = [];
+
+    if(typeof model === 'undefined' || !model){
+      console.warn('[FV_DEBUG] model is not loaded yet.');
+      return [];
+    }
+
+    model.traverse(o => {
+      if(!o || !o.isMesh || !o.material) return;
+
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for(let i=0; i<mats.length; i++){
+        const m = mats[i];
+        if(!m) continue;
+
+        const matName = (m.name ? String(m.name).trim() : '(no-name)');
+        if(!wanted.has(matName)) continue;
+
+        const assignedSlot = (typeof assign !== 'undefined' && assign) ? (assign[m.uuid] || null) : null;
+
+        let slotUrl = null;
+        try{
+          if(assignedSlot && typeof state !== 'undefined' && state && state[assignedSlot]){
+            slotUrl = state[assignedSlot].url || null;
+          }
+        }catch(e){}
+
+        let mapSrc = null;
+        try{
+          const img = m.map && m.map.image ? m.map.image : null;
+          mapSrc = img ? (img.currentSrc || img.src || null) : null;
+        }catch(e){}
+
+        rows.push({
+          meshName: getObjLabel(o),
+          meshPath: getPathFromModel(o),
+          materialIndex: Array.isArray(o.material) ? i : 0,
+          materialName: matName,
+          materialUuid: m.uuid,
+          assignedSlot: assignedSlot,
+          slotUrl: slotUrl,
+          hasMap: !!(m.map),
+          mapSrc: mapSrc
+        });
+      }
+    });
+
+    const countByMat = {};
+    for(const r of rows){
+      countByMat[r.materialName] = (countByMat[r.materialName] || 0) + 1;
+    }
+
+    console.group('[FV_DEBUG] findMeshesByMatNames result');
+    console.log('countByMat:', countByMat);
+    console.table(rows);
+    console.groupEnd();
+
+    return rows;
+  }
+
+  // attach to __FV_DEBUG__ if available
+  if(typeof window !== 'undefined'){
+    if(window.__FV_DEBUG__){
+      window.__FV_DEBUG__.findMeshesByMatNames = findMeshesByMatNames;
+      window.__FV_DEBUG__.findMeshesByMatName  = function(name){ return findMeshesByMatNames([name]); };
+      console.log('[FV_DEBUG] attached: __FV_DEBUG__.findMeshesByMatNames([...])');
+    }else{
+      window.__FV_findMeshesByMatNames = findMeshesByMatNames;
+      console.log('[FV_DEBUG] __FV_DEBUG__ not found; attached: window.__FV_findMeshesByMatNames([...])');
+    }
+  }
+})();
+
+//ここまで
+  
+
+
+
+  
   console.log('[FV_DEBUG] window.__FV_DEBUG__ ready. Try: __FV_DEBUG__.dump()');
 }catch(e){
   console.warn('[FV_DEBUG] init failed:', e);
