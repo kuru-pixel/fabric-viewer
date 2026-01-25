@@ -989,6 +989,25 @@ function applyPatternByIndex(index) {
     assign[m.uuid] = slot || '—';
   });
 
+//一旦テストで入れてる
+  if (currentPatternId === 'RI-2') {
+  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+  console.table(targetMats.map(m => {
+    const zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name] || '';
+    const slot = zone ? (PATTERN_PERMS[index]?.[zone] || '') : '';
+    return {
+      matName: m.name,
+      zone,
+      slot,
+      fabricId: slot ? (slotFabricIds?.[slot] ?? null) : null,
+    };
+  }));
+}
+//ここまで
+
+
+  
+
   applyAssignments();
   msg(perm.label + ' を適用しました');
 }
