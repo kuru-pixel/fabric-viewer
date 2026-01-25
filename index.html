@@ -994,33 +994,44 @@ function applyPatternByIndex(index) {
 
   
 
-  function __resolveZoneForMat(m){
-    if(!m) return null;
+function __resolveZoneForMat(m){
+  if(!m) return null;
 
-    // uuid はリロードで変わり得るので、まず name を優先（uuidも一応拾う）
-    if(MAT_ZONE[m.uuid]) return MAT_ZONE[m.uuid];
+  // name（GLB由来）を先に正規化
+  const raw = (m.name || '');
+  const n = String(raw).trim();
 
-    const raw = (m.name || '');
-    if(MAT_ZONE[raw]) return MAT_ZONE[raw];
+  // ★ボタン等はゾーン対象外（今回のキモ）
+  if(/^Default Button\b/i.test(n)) return null;
 
-    const n = String(raw).trim();
-    if(MAT_ZONE[n]) return MAT_ZONE[n];
+  // ★優先順位：name → uuid（uuidはクローン等で変わりやすいので後）
+  if(MAT_ZONE[raw]) return MAT_ZONE[raw];
+  if(MAT_ZONE[n]) return MAT_ZONE[n];
 
-    // ".001" / " Copy ..." などの揺れを落として再トライ
-    const base = n.replace(/\.(\d+)$/, '').replace(/\s+Copy.*$/i, '').trim();
-    if(MAT_ZONE[base]) return MAT_ZONE[base];
+  // ".001" / " Copy ..." などの揺れを落として再トライ
+  const base = n
+    .replace(/\.(\d+)$/, '')
+    .replace(/\s+Copy.*$/i, '')
+    .trim();
 
-    // プレフィックス一致（末尾に .001 等が付くケース）
-    for(const k in MAT_ZONE){
-      if(!k) continue;
-      if(n === k || n.startsWith(k)) return MAT_ZONE[k];
-    }
-    for(const k in MAT_ZONE){
-      if(!k) continue;
-      if(base === k || base.startsWith(k)) return MAT_ZONE[k];
-    }
-    return null;
+  if(MAT_ZONE[base]) return MAT_ZONE[base];
+
+  // プレフィックス一致（末尾に .001 等が付くケース）
+  for(const k in MAT_ZONE){
+    if(!k) continue;
+    if(n === k || n.startsWith(k)) return MAT_ZONE[k];
   }
+  for(const k in MAT_ZONE){
+    if(!k) continue;
+    if(base === k || base.startsWith(k)) return MAT_ZONE[k];
+  }
+
+  // 最後の保険：uuid
+  if(m.uuid && MAT_ZONE[m.uuid]) return MAT_ZONE[m.uuid];
+
+  return null;
+}
+
 
   targetMats.forEach(m => {
     let zone = __resolveZoneForMat(m);
