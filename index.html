@@ -1119,6 +1119,7 @@ function __resolveZoneForMat(m){
   // ".001" / " Copy ..." などの揺れを落として再トライ
   const base = n
     .replace(/\.(\d+)$/, '')
+    .replace(/_([0-9]+)$/, '') // ← 追加: "_1" みたいなBlender/書き出し揺れ対応
     .replace(/\s+Copy.*$/i, '')
     .trim();
 
