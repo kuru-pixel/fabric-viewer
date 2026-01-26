@@ -507,6 +507,19 @@ function hasAllTextures(){
   return !!(state.A.tex && state.B.tex && state.C.tex);
 }
 
+
+
+  
+function normalizeMatName(name){
+  return String(name ?? "")
+    .trim()
+    .replace(/\s*\(.*\)\s*$/, "")   // 末尾の (xxx) を削る保険
+    .replace(/\.\d{3}\s*$/, "");    // .001 .002 みたいなBlender系サフィックスを削る
+}
+
+
+
+  
 // ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
 // ★ key は material.name でも material.uuid でもOK（どちらでもマッチ）
 
@@ -638,7 +651,7 @@ try{
   Object.defineProperty(window, 'fvState', { configurable:true, get:()=>state });
   Object.defineProperty(window, 'fvAssign', { configurable:true, get:()=>assign });
 
-  window.__FV_DEBUG__ = {
+    window.__FV_DEBUG__ = {
     dump(){
       const stateView = {};
       try{
@@ -656,6 +669,55 @@ try{
         assignCount: Object.keys(assign||{}).length,
         assign: (typeof assign!=='undefined') ? { ...assign } : null
       };
+    },
+
+    // ★追加：RI-2の3素材が「どのslotに割当」「slotのtex有無」「material.mapに刺さってるか」を表で出す
+    ri2Report(){
+      const wanted = new Set([
+        'Cotton_50s_Poplin_2822',
+        'Cotton_50s_Poplin_2829',
+        'Cotton_50s_Poplin_2813',
+        'Default Button_2835'
+      ]);
+
+      const rows = [];
+      try{
+        (targetMats || []).forEach(m=>{
+          if(!m) return;
+          const name = m.name || '(no-name)';
+          if(!wanted.has(name)) return;
+
+          const assigned = assign[m.uuid];
+          const st = (assigned && state[assigned]) ? state[assigned] : null;
+          const tex = st ? st.tex : null;
+
+          let matMapSrc = '(no-map)';
+          try{
+            if(m.map && m.map.image){
+              matMapSrc = m.map.image.currentSrc || m.map.image.src || '(image)';
+            }else if(m.map){
+              matMapSrc = '(map-without-image)';
+            }
+          }catch(e){}
+
+          rows.push({
+            name,
+            uuid: m.uuid,
+            assigned: assigned || '(none)',
+            hasStateTex: !!tex,
+            stateUrl: st ? (st.url || '') : '',
+            matHasMap: !!m.map,
+            matMapSrc,
+            matMapIsStateTex: !!tex && (m.map === tex),
+            matType: m.type || ''
+          });
+        });
+      }catch(e){
+        console.warn('[ri2Report] failed:', e);
+      }
+
+      console.table(rows);
+      return rows;
     }
   };
 
