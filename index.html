@@ -758,14 +758,29 @@ function applyAssignments(){
           m.map = null;
           if(m.color) m.color.set(0xffffff);
         }
-      }else{
+            } else {
+        // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
+        const orig = origMatState.get(m.uuid);
+        if (orig) {
+          m.normalMap   = orig.normalMap;
+          m.aoMap       = orig.aoMap;
+          m.emissiveMap = orig.emissiveMap;
+          m.alphaMap    = orig.alphaMap;
+          if (m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+
+          // ここは好みだが、とりあえず元に戻す方が比較が正確
+          if (typeof orig.metalness === 'number') m.metalness = orig.metalness;
+          if (typeof orig.roughness === 'number') m.roughness = orig.roughness;
+          m.transparent = orig.transparent;
+          m.opacity     = orig.opacity;
+        }
+
         m.map = tex;
-        // [FIX-A] RI-2: map は color と乗算される。元の color が暗い(黒など)だとテクスチャが見えないので白に戻す
+
+        // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
         if (m.color) m.color.set(0xffffff);
-        // optional: 発光がある素材は色味が変わるので切りたい場合は↓も
-        // if (m.emissive) m.emissive.set(0x000000);
-        // if ('emissiveIntensity' in m) m.emissiveIntensity = 0;
       }
+
       m.needsUpdate = true;
       //一瞬けす
       //if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
