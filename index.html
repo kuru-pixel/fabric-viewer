@@ -760,6 +760,11 @@ function applyAssignments(){
         }
       }else{
         m.map = tex;
+        // [FIX-A] RI-2: map は color と乗算される。元の color が暗い(黒など)だとテクスチャが見えないので白に戻す
+        if (m.color) m.color.set(0xffffff);
+        // optional: 発光がある素材は色味が変わるので切りたい場合は↓も
+        // if (m.emissive) m.emissive.set(0x000000);
+        // if ('emissiveIntensity' in m) m.emissiveIntensity = 0;
       }
       m.needsUpdate = true;
       if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
