@@ -767,8 +767,9 @@ function applyAssignments(){
         // if ('emissiveIntensity' in m) m.emissiveIntensity = 0;
       }
       m.needsUpdate = true;
-      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+      //一瞬けす
+      //if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
+      //if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
   saveAssignToStorage();
