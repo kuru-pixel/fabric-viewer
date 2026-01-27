@@ -454,21 +454,31 @@ function analyze(root){
 
   // snapshot originals so unassigned mats (buttons/topstitch etc) can be restored
   origMatState = new Map();
-  for(const m of targetMats){
-    origMatState.set(m.uuid, {
-      map: m.map || null,
-      color: (m.color && m.color.clone) ? m.color.clone() : null,
-      metalness: (typeof m.metalness==='number') ? m.metalness : undefined,
-      roughness: (typeof m.roughness==='number') ? m.roughness : undefined,
-      normalMap: m.normalMap || null,
-      aoMap: m.aoMap || null,
-      emissiveMap: m.emissiveMap || null,
-      emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
-      alphaMap: m.alphaMap || null,
-      transparent: !!m.transparent,
-      opacity: (typeof m.opacity==='number') ? m.opacity : 1
-    });
-  }
+for (const m of targetMats) {
+  origMatState.set(m.uuid, {
+    map: m.map || null,
+    color: (m.color && m.color.clone) ? m.color.clone() : null,
+
+    metalness: (typeof m.metalness === 'number') ? m.metalness : undefined,
+    roughness: (typeof m.roughness === 'number') ? m.roughness : undefined,
+
+    // ★ここが崩れてた
+    normalMap: m.normalMap || null,
+    roughnessMap: m.roughnessMap || null,
+    metalnessMap: m.metalnessMap || null,
+    normalScale: (m.normalScale && m.normalScale.clone) ? m.normalScale.clone() : null,
+
+    aoMap: m.aoMap || null,
+    emissiveMap: m.emissiveMap || null,
+    emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
+
+    alphaMap: m.alphaMap || null,
+    transparent: !!m.transparent,
+    opacity: (typeof m.opacity === 'number') ? m.opacity : 1
+  });
+}
+
+
 
   updateMatInfo();
     // ★初回セットアップ用：コンソールに material.uuid を出す
@@ -507,6 +517,19 @@ function hasAllTextures(){
   return !!(state.A.tex && state.B.tex && state.C.tex);
 }
 
+
+
+  
+function normalizeMatName(name){
+  return String(name ?? "")
+    .trim()
+    .replace(/\s*\(.*\)\s*$/, "")   // 末尾の (xxx) を削る保険
+    .replace(/\.\d{3}\s*$/, "");    // .001 .002 みたいなBlender系サフィックスを削る
+}
+
+
+
+  
 // ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
 // ★ key は material.name でも material.uuid でもOK（どちらでもマッチ）
 
@@ -563,28 +586,40 @@ function loadTexFromUrlFor(key, url, onDone){
   });
 }
 
-// Allow fallback for fabrics stored as "<id>_1.jpg" instead of "<id>.jpg" (e.g. S-140_1.jpg)
+// Allow fallback for fabrics stored as "<id>_1.jpg" etc.
 function loadTexByFabricId(key, id){
-  // ★追加：id整形（"S-140_1" みたいに来ても "S-140" に戻す）
   id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, "");     // ← "_1" "_2" を剥がす
+  id = id.replace(/_([0-9]+)$/i, "");   // "_1" "_2" を剥がす
   id = id.toUpperCase();
 
-  // ★変更：_2 → _1 → 通常 の順で試す（"S-140.jpg" は最後）
-  const urls = [
-    `./assets/fabrics/${id}_2.jpg`,
-    `./assets/fabrics/${id}_1.jpg`,
-    `./assets/fabrics/${id}.jpg`,
-  ];
+  // _2 → _1 → 通常 の順
+  const stems = [`${id}_2`, `${id}_1`, `${id}`];
+
+  // ★追加：拡張子/大文字小文字もフォールバック（GitHub Pagesは大小区別される）
+  const exts = ["jpg", "JPG", "jpeg", "png", "webp"];
+
+  const urls = [];
+  for(const s of stems){
+    for(const ext of exts){
+      urls.push(`./assets/fabrics/${s}.${ext}`);
+    }
+  }
 
   const tryLoad = (i)=>{
+    if(i >= urls.length){
+      msg(`生地画像が見つかりません: ${id}`);
+      return;
+    }
     loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err && i+1 < urls.length) return tryLoad(i+1);
-      if(err) msg(`生地画像が見つかりません: ${id}`);
+      if(err) return tryLoad(i+1);
+      // 成功した実URLをログに残す（あとで整理しやすい）
+      console.log("[FABRIC OK]", key, urls[i]);
     });
   };
+
   tryLoad(0);
 }
+
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
@@ -626,7 +661,7 @@ try{
   Object.defineProperty(window, 'fvState', { configurable:true, get:()=>state });
   Object.defineProperty(window, 'fvAssign', { configurable:true, get:()=>assign });
 
-  window.__FV_DEBUG__ = {
+    window.__FV_DEBUG__ = {
     dump(){
       const stateView = {};
       try{
@@ -644,8 +679,58 @@ try{
         assignCount: Object.keys(assign||{}).length,
         assign: (typeof assign!=='undefined') ? { ...assign } : null
       };
+    },
+
+    // ★追加：RI-2の3素材が「どのslotに割当」「slotのtex有無」「material.mapに刺さってるか」を表で出す
+    ri2Report(){
+      const wanted = new Set([
+        'Cotton_50s_Poplin_2822',
+        'Cotton_50s_Poplin_2829',
+        'Cotton_50s_Poplin_2813',
+        'Default Button_2835'
+      ]);
+
+      const rows = [];
+      try{
+        (targetMats || []).forEach(m=>{
+          if(!m) return;
+          const name = m.name || '(no-name)';
+          if(!wanted.has(name)) return;
+
+          const assigned = assign[m.uuid];
+          const st = (assigned && state[assigned]) ? state[assigned] : null;
+          const tex = st ? st.tex : null;
+
+          let matMapSrc = '(no-map)';
+          try{
+            if(m.map && m.map.image){
+              matMapSrc = m.map.image.currentSrc || m.map.image.src || '(image)';
+            }else if(m.map){
+              matMapSrc = '(map-without-image)';
+            }
+          }catch(e){}
+
+          rows.push({
+            name,
+            uuid: m.uuid,
+            assigned: assigned || '(none)',
+            hasStateTex: !!tex,
+            stateUrl: st ? (st.url || '') : '',
+            matHasMap: !!m.map,
+            matMapSrc,
+            matMapIsStateTex: !!tex && (m.map === tex),
+            matType: m.type || ''
+          });
+        });
+      }catch(e){
+        console.warn('[ri2Report] failed:', e);
+      }
+
+      console.table(rows);
+      return rows;
     }
   };
+
   console.log('[FV_DEBUG] window.__FV_DEBUG__ ready. Try: __FV_DEBUG__.dump()');
 }catch(e){
   console.warn('[FV_DEBUG] init failed:', e);
@@ -683,12 +768,33 @@ function applyAssignments(){
           m.map = null;
           if(m.color) m.color.set(0xffffff);
         }
-      }else{
+            } else {
+        // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
+        const orig = origMatState.get(m.uuid);
+        if (orig) {
+          m.normalMap   = orig.normalMap;
+          m.aoMap       = orig.aoMap;
+          m.emissiveMap = orig.emissiveMap;
+          m.alphaMap    = orig.alphaMap;
+          if (m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+
+          // ここは好みだが、とりあえず元に戻す方が比較が正確
+          if (typeof orig.metalness === 'number') m.metalness = orig.metalness;
+          if (typeof orig.roughness === 'number') m.roughness = orig.roughness;
+          m.transparent = orig.transparent;
+          m.opacity     = orig.opacity;
+        }
+
         m.map = tex;
+
+        // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
+        if (m.color) m.color.set(0xffffff);
       }
+
       m.needsUpdate = true;
-      if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+      //一瞬けす
+      //if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
+      //if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
     }
   });
   saveAssignToStorage();
@@ -975,35 +1081,89 @@ function applyPatternByIndex(index) {
   Object.keys(assign).forEach(k => { delete assign[k]; });
 
   const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
+  const __missingMatNames = new Set();
+
+
+  window.__FV_getMissingMatNames = () => Array.from(__missingMatNames);
+
+  
+
+function __resolveZoneForMat(m){
+  if(!m) return null;
+
+  // name（GLB由来）を先に正規化
+  const raw = (m.name || '');
+  const n = String(raw).trim();
+
+  // ★ボタン等はゾーン対象外（今回のキモ）
+  if(/^Default Button\b/i.test(n)) return null;
+
+  // ★優先順位：name → uuid（uuidはクローン等で変わりやすいので後）
+  if(MAT_ZONE[raw]) return MAT_ZONE[raw];
+  if(MAT_ZONE[n]) return MAT_ZONE[n];
+
+  // ".001" / " Copy ..." などの揺れを落として再トライ
+  const base = n
+    .replace(/\.(\d+)$/, '')
+    .replace(/_([0-9]+)$/, '') // ← 追加: "_1" みたいなBlender/書き出し揺れ対応
+    .replace(/\s+Copy.*$/i, '')
+    .trim();
+
+  if(MAT_ZONE[base]) return MAT_ZONE[base];
+
+  // プレフィックス一致（末尾に .001 等が付くケース）
+  for(const k in MAT_ZONE){
+    if(!k) continue;
+    if(n === k || n.startsWith(k)) return MAT_ZONE[k];
+  }
+  for(const k in MAT_ZONE){
+    if(!k) continue;
+    if(base === k || base.startsWith(k)) return MAT_ZONE[k];
+  }
+
+  // 最後の保険：uuid
+  if(m.uuid && MAT_ZONE[m.uuid]) return MAT_ZONE[m.uuid];
+
+  return null;
+}
+
 
   targetMats.forEach(m => {
-    let zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name];
-    // 未定義でも「布っぽいマテリアル」だけは生地C(Z3)として扱う（ボタン/ステッチ等は除外）
+    let zone = __resolveZoneForMat(m);
+
+    // 自動Z3は RI-1 だけに限定（RI-2でやると “全部Z3” になりやすい）
     if(!zone){
       const n = (m.name || '');
-      const isFabricLike = /Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n);
+      const allowAutoZ3 = (currentPatternId === 'RI-1');
+      const isFabricLike = allowAutoZ3 && (/Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n));
       if(isFabricLike) zone = 'Z3';
     }
-    if (!zone) { assign[m.uuid] = '—'; return; }
+
+    if (!zone) {
+      assign[m.uuid] = '—';
+      if(currentPatternId === 'RI-2') __missingMatNames.add(m.name || '(no-name)');
+      return;
+    }
+
     const slot = perm[zone];
     assign[m.uuid] = slot || '—';
   });
 
-//一旦テストで入れてる
-  if (currentPatternId === 'RI-2') {
-  const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
-  console.table(targetMats.map(m => {
-    const zone = MAT_ZONE[m.uuid] || MAT_ZONE[m.name] || '';
-    const slot = zone ? (PATTERN_PERMS[index]?.[zone] || '') : '';
-    return {
-      matName: m.name,
-      zone,
-      slot,
-      fabricId: slot ? (slotFabricIds?.[slot] ?? null) : null,
-    };
-  }));
+if (currentPatternId === 'RI-2') {
+  const IGNORE = new Set(['Default Button_2835']);
+  if (typeof __missingMatNames !== 'undefined') {
+    for (const n of Array.from(__missingMatNames)) {
+      if (IGNORE.has(n)) __missingMatNames.delete(n);
+    }
+  }
 }
-//ここまで
+
+
+
+  if(currentPatternId === 'RI-2' && __missingMatNames.size){
+    console.warn('[RI-2] MAT_ZONE_BY_PATTERN に未登録の material.name（追加して）:', Array.from(__missingMatNames));
+  }
+
 
 
   
@@ -1158,7 +1318,7 @@ $('resetAll').addEventListener('click', ()=>{
 
     // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
 // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-const keepIds = { ...slotFabricIds };   // ← 先に退避（重要）
+const keepIds = { ...slotFabricIds };  // ← 先に退避（重要）
 
 rebuildState();
 
