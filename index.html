@@ -481,9 +481,6 @@ for (const m of targetMats) {
 
 
   updateMatInfo();
-    // ★初回セットアップ用：コンソールに material.uuid を出す
-  logMaterialsForZoneSetup();
-
 }
 function updateMatInfo(){
   const el = $('matinfo');
@@ -556,19 +553,6 @@ const MAT_ZONE_BY_PATTERN = {
 };
 
   
-// コンソールで uuid を把握するためのヘルパ（あとで説明する）
-function logMaterialsForZoneSetup() {
-  console.log('--- material list for MAT_ZONE (name / uuid) ---');
-  const rows = targetMats.map((m,i)=>({
-    i,
-    name: m.name || '(no-name)',
-    uuid: m.uuid
-  }));
-  console.table(rows);
-  console.log('MAT_ZONE_BY_PATTERN に入れるキーは name か uuid のどちらでもOKです。');
-  console.log("例:  'MaterialNameHere': 'Z1',  または  '" + (rows[0]?.uuid || 'uuid_here') + "': 'Z1'");
-}
-
 // ===== URLから生地画像を読み込む =====
 function loadTexFromUrlFor(key, url, onDone){
   if(!state[key]) return;
@@ -652,89 +636,7 @@ function loadAssignFromStorage(){
 }
 
 
-// =====================
-// Debug helpers (Console)
-// =====================
-try{
-  // Always reflect latest (slotFabricIds is reassigned when pattern changes)
-  Object.defineProperty(window, 'slotFabricIds', { configurable:true, get:()=>slotFabricIds });
-  Object.defineProperty(window, 'fvState', { configurable:true, get:()=>state });
-  Object.defineProperty(window, 'fvAssign', { configurable:true, get:()=>assign });
 
-    window.__FV_DEBUG__ = {
-    dump(){
-      const stateView = {};
-      try{
-        Object.keys(state||{}).forEach(k=>{
-          const v = state[k]||{};
-          stateView[k] = { url: v.url||'', hasTex: !!v.tex };
-        });
-      }catch(e){}
-      return {
-        pattern: (typeof currentPatternId!=='undefined') ? currentPatternId : null,
-        glb: (typeof GLB_PATH!=='undefined') ? GLB_PATH : null,
-        slots: (typeof getSlots==='function') ? getSlots() : null,
-        slotFabricIds: (typeof slotFabricIds!=='undefined') ? { ...slotFabricIds } : null,
-        state: stateView,
-        assignCount: Object.keys(assign||{}).length,
-        assign: (typeof assign!=='undefined') ? { ...assign } : null
-      };
-    },
-
-    // ★追加：RI-2の3素材が「どのslotに割当」「slotのtex有無」「material.mapに刺さってるか」を表で出す
-    ri2Report(){
-      const wanted = new Set([
-        'Cotton_50s_Poplin_2822',
-        'Cotton_50s_Poplin_2829',
-        'Cotton_50s_Poplin_2813',
-        'Default Button_2835'
-      ]);
-
-      const rows = [];
-      try{
-        (targetMats || []).forEach(m=>{
-          if(!m) return;
-          const name = m.name || '(no-name)';
-          if(!wanted.has(name)) return;
-
-          const assigned = assign[m.uuid];
-          const st = (assigned && state[assigned]) ? state[assigned] : null;
-          const tex = st ? st.tex : null;
-
-          let matMapSrc = '(no-map)';
-          try{
-            if(m.map && m.map.image){
-              matMapSrc = m.map.image.currentSrc || m.map.image.src || '(image)';
-            }else if(m.map){
-              matMapSrc = '(map-without-image)';
-            }
-          }catch(e){}
-
-          rows.push({
-            name,
-            uuid: m.uuid,
-            assigned: assigned || '(none)',
-            hasStateTex: !!tex,
-            stateUrl: st ? (st.url || '') : '',
-            matHasMap: !!m.map,
-            matMapSrc,
-            matMapIsStateTex: !!tex && (m.map === tex),
-            matType: m.type || ''
-          });
-        });
-      }catch(e){
-        console.warn('[ri2Report] failed:', e);
-      }
-
-      console.table(rows);
-      return rows;
-    }
-  };
-
-  console.log('[FV_DEBUG] window.__FV_DEBUG__ ready. Try: __FV_DEBUG__.dump()');
-}catch(e){
-  console.warn('[FV_DEBUG] init failed:', e);
-}
 
 function prepTexture(t){
   if(!t) return;
@@ -1081,13 +983,8 @@ function applyPatternByIndex(index) {
   Object.keys(assign).forEach(k => { delete assign[k]; });
 
   const MAT_ZONE = MAT_ZONE_BY_PATTERN[currentPatternId] || {};
-  const __missingMatNames = new Set();
-
-
-  window.__FV_getMissingMatNames = () => Array.from(__missingMatNames);
-
   
-
+  
 function __resolveZoneForMat(m){
   if(!m) return null;
 
@@ -1131,43 +1028,10 @@ function __resolveZoneForMat(m){
   targetMats.forEach(m => {
     let zone = __resolveZoneForMat(m);
 
-    // 自動Z3は RI-1 だけに限定（RI-2でやると “全部Z3” になりやすい）
-    if(!zone){
-      const n = (m.name || '');
-      const allowAutoZ3 = (currentPatternId === 'RI-1');
-      const isFabricLike = allowAutoZ3 && (/Nylon[_ ]Featherweight/i.test(n) || /Featherweight/i.test(n));
-      if(isFabricLike) zone = 'Z3';
-    }
-
-    if (!zone) {
-      assign[m.uuid] = '—';
-      if(currentPatternId === 'RI-2') __missingMatNames.add(m.name || '(no-name)');
-      return;
-    }
-
-    const slot = perm[zone];
+      const slot = perm[zone];
     assign[m.uuid] = slot || '—';
   });
-
-if (currentPatternId === 'RI-2') {
-  const IGNORE = new Set(['Default Button_2835']);
-  if (typeof __missingMatNames !== 'undefined') {
-    for (const n of Array.from(__missingMatNames)) {
-      if (IGNORE.has(n)) __missingMatNames.delete(n);
-    }
-  }
-}
-
-
-
-  if(currentPatternId === 'RI-2' && __missingMatNames.size){
-    console.warn('[RI-2] MAT_ZONE_BY_PATTERN に未登録の material.name（追加して）:', Array.from(__missingMatNames));
-  }
-
-
-
   
-
   applyAssignments();
   msg(perm.label + ' を適用しました');
 }
