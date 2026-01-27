@@ -454,28 +454,20 @@ function analyze(root){
 
   // snapshot originals so unassigned mats (buttons/topstitch etc) can be restored
   origMatState = new Map();
-for (const m of targetMats) {
-  origMatState.set(m.uuid, {
-    map: m.map || null,
-    color: (m.color && m.color.clone) ? m.color.clone() : null,
-
-    metalness: (typeof m.metalness === 'number') ? m.metalness : undefined,
-    roughness: (typeof m.roughness === 'number') ? m.roughness : undefined,
-
-    // ★ここが崩れてた
-    normalMap: m.normalMap || null,
-    roughnessMap: m.roughnessMap || null,
-    metalnessMap: m.metalnessMap || null,
-    normalScale: (m.normalScale && m.normalScale.clone) ? m.normalScale.clone() : null,
-
-    aoMap: m.aoMap || null,
-    emissiveMap: m.emissiveMap || null,
-    emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
-
-    alphaMap: m.alphaMap || null,
-    transparent: !!m.transparent,
-    opacity: (typeof m.opacity === 'number') ? m.opacity : 1
-  });
+  for(const m of targetMats){
+    origMatState.set(m.uuid, {
+      map: m.map || null,
+      color: (m.color && m.color.clone) ? m.color.clone() : null,
+      metalness: (typeof m.metalness==='number') ? m.metalness : undefined,
+      roughness: (typeof m.roughness==='number') ? m.roughness : undefined,
+      normalMap: m.normalMap || null,
+      aoMap: m.aoMap || null,
+      emissiveMap: m.emissiveMap || null,
+      emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
+      alphaMap: m.alphaMap || null,
+      transparent: !!m.transparent,
+      opacity: (typeof m.opacity==='number') ? m.opacity : 1
+    });
 }
 
 
