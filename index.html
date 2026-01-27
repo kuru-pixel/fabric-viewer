@@ -460,7 +460,13 @@ function analyze(root){
       color: (m.color && m.color.clone) ? m.color.clone() : null,
       metalness: (typeof m.metalness==='number') ? m.metalness : undefined,
       roughness: (typeof m.roughness==='number') ? m.roughness : undefined,
-      normalMap: m.normalMap || null,
+      normalMap:
+      
+      roughnessMap: m.roughnessMap || null,
+      metalnessMap: m.metalnessMap || null,
+      normalScale: (m.normalScale && m.normalScale.clone) ? m.normalScale.clone() : null,
+
+      m.normalMap || null,
       aoMap: m.aoMap || null,
       emissiveMap: m.emissiveMap || null,
       emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
