@@ -933,7 +933,6 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
       const clone = old.clone(); mesh.material[idx] = clone;
       
       const snap = origMatState && origMatState.get(old.uuid);
-์; // oldの元状態
 if (snap && !origMatState.has(clone.uuid)) {
   origMatState.set(clone.uuid, {
     ...snap,
