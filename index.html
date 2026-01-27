@@ -687,6 +687,18 @@ function applyAssignments(){
           m.opacity     = orig.opacity;
         }
 
+        // m.map = tex; の直前
+if (orig && orig.map && tex) {
+  tex.wrapS = orig.map.wrapS;
+  tex.wrapT = orig.map.wrapT;
+  if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
+  if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
+  if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
+  if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
+  tex.needsUpdate = true;
+}
+
+
         m.map = tex;
 
         // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
@@ -920,6 +932,18 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
     if(count > 1){
       const clone = old.clone(); mesh.material[idx] = clone;
       
+      const snap = origMatState && origMatState.get(old.uuid);
+์; // oldの元状態
+if (snap && !origMatState.has(clone.uuid)) {
+  origMatState.set(clone.uuid, {
+    ...snap,
+    color: snap.color?.clone?.() ?? null,
+    emissive: snap.emissive?.clone?.() ?? null,
+    normalScale: snap.normalScale?.clone?.() ?? null,
+  });
+}
+
+      
       materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
       if(isSupportedMat(clone)) targetMats.push(clone); return clone;
     } return old;
@@ -928,6 +952,18 @@ function ensureUniqueMaterialOnMesh(mesh, idx){
     const count = materialUseCount.get(old.uuid)||0;
     if(count > 1){
       const clone = old.clone(); mesh.material = clone;
+
+      const snap = origMatState && origMatState.get(old.uuid);
+์; // oldの元状態
+if (snap && !origMatState.has(clone.uuid)) {
+  origMatState.set(clone.uuid, {
+    ...snap,
+    color: snap.color?.clone?.() ?? null,
+    emissive: snap.emissive?.clone?.() ?? null,
+    normalScale: snap.normalScale?.clone?.() ?? null,
+  });
+}
+
       materialUseCount.set(old.uuid, count-1); materialUseCount.set(clone.uuid, 1);
       if(isSupportedMat(clone)) targetMats.push(clone); return clone;
     } return old;
