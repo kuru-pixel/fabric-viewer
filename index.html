@@ -272,11 +272,13 @@ body.selecting #patternSelect{
 <canvas id="c"></canvas>
 
 
-<script src="./assets/threejs/three.min.js"></script>
-<script src="./assets/threejs/GLTFLoader.js"></script>
-<script src="./assets/threejs/OrbitControls.js"></script>
+<script src="/fabric-viewer/assets/threejs/three.min.js"></script>
+<script src="/fabric-viewer/assets/threejs/GLTFLoader.js"></script>
+<script src="/fabric-viewer/assets/threejs/OrbitControls.js"></script>
 <script>
 /* ========= 基本 ========= */
+console.log('[FV] script loaded', location.href);
+
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 
@@ -291,17 +293,17 @@ let currentPatternId = patternParam;
 // ID → 画像パスを自動で組み立てる
 const FABRIC_EXT = '.jpg';
 function fabricIdToUrl(id) {
-  return `./assets/fabrics/${id}${FABRIC_EXT}`;
+  return `/fabric-viewer/assets/fabrics/${id}${FABRIC_EXT}`;
 }
 
 // 型ごとの定義
 const PATTERNS = {
-  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
-  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-1': { glb: '/fabric-viewer/assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-2': { glb: '/fabric-viewer/assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-3': { glb: '/fabric-viewer/assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-4': { glb: '/fabric-viewer/assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-5': { glb: '/fabric-viewer/assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: '/fabric-viewer/assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
 };
 
 function getSlots(){
@@ -593,7 +595,7 @@ function loadTexByFabricId(key, id){
   const urls = [];
   for(const s of stems){
     for(const ext of exts){
-      urls.push(`./assets/fabrics/${s}.${ext}`);
+      urls.push(`/fabric-viewer/assets/fabrics/${s}.${ext}`);
     }
   }
 
@@ -680,7 +682,7 @@ function prepTexture(t){
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
 
-const FAB_PRESET_DIR = './assets/fabric-presets/';
+const FAB_PRESET_DIR = '/fabric-viewer/assets/fabric-presets/';
 const _fabricPresetCache = new Map(); // id -> Promise(preset)
 
 function _computeUvRepeatFromMesh(mesh){
@@ -1381,6 +1383,7 @@ $('resetAll').addEventListener('click', ()=>{
   grid.addEventListener('click', (e)=>{
     const card = e.target.closest('.patternCard'); if(!card) return;
     const id = card.dataset.id;       // "RI-3" とか
+    console.log('[FV] pattern clicked', id);
     const def = PATTERNS[id];
     if (!def){ msg(`${id} は準備中です`); return; }
 
