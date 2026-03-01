@@ -387,6 +387,8 @@ function loadModel(path){
       msg('garment.glb を読み込みました');
       loadAssignFromStorage();
       applyAssignments();
+      // ★追加：URL/保持中の生地IDからプリセットGLBを読み込む（JPG無し運用でも確実に反映）
+      syncPresetsFromSlotIds();
       // ★プリセットボタンを初期化
       initPresetButtons();
 
@@ -639,6 +641,23 @@ function loadPresetByFabricId(slot, id){
     state[slot].preset = null;
     msg(`プリセットGLBが読めません: ${norm}`);
   });
+}
+
+
+// ===== スロットの生地IDからプリセットGLBを再同期（安全策） =====
+function syncPresetsFromSlotIds(){
+  try{
+    const slots = getSlots();
+    slots.forEach(slot=>{
+      const id = slotFabricIds?.[slot];
+      if(!id) return;
+      // すでに読み込み済みならスキップ
+      if(state?.[slot]?.preset && state?.[slot]?.presetId === normalizeFabricId(id)) return;
+      loadPresetByFabricId(slot, id);
+    });
+  }catch(e){
+    console.warn('[syncPresetsFromSlotIds] failed', e);
+  }
 }
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
@@ -1388,6 +1407,9 @@ const nextIds = {};
 getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; }); // ← keepIds から復元
 slotFabricIds = nextIds;
 
+// ★追加：型選択後も、現在の生地IDに対応するプリセットGLBを読み込む
+syncPresetsFromSlotIds();
+
 document.body.classList.remove('selecting');
 loadModel(GLB_PATH);
 
@@ -1404,6 +1426,8 @@ loadModel(GLB_PATH);
   document.body.classList.remove('selecting');
   GLB_PATH = def.glb;
   loadModel(GLB_PATH);
+// ★追加：URLにfabricsがある場合、プリセットGLBを先に読み込み（モデル読込後に適用される）
+syncPresetsFromSlotIds();
 })();
 
 // GLBから2Dサムネを生成（フォールバック）
