@@ -503,7 +503,7 @@ function rebuildState(){
   const next = {};
   getSlots().forEach(k=>{
     // 既にあれば引き継ぎ（A/B/Cの画像を保持したい）
-    next[k] = state[k] || { tex:null, url:'', preset:null, presetId:'' };
+    next[k] = state[k] || { tex:null, url:'' };
   });
   state = next;
 }
@@ -612,31 +612,6 @@ function loadTexByFabricId(key, id){
   tryLoad(0);
 }
 
-function normalizeFabricId(id){
-  id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, ""); // "_1" "_2" を剥がす
-  return id.toUpperCase();
-}
-
-function loadPresetByFabricId(slot, id){
-  if(!state[slot]) return;
-  const norm = normalizeFabricId(id);
-
-  state[slot].preset = null;
-  state[slot].presetId = norm;
-
-  loadFabricPresetById(norm).then(preset=>{
-    state[slot].preset = preset;
-    applyAssignments();
-    msg(`生地${slot}のプリセットGLBを読み込み: ${norm}`);
-  }).catch(err=>{
-    console.warn('[FAB_PRESET] load failed', norm, err);
-    state[slot].preset = null;
-    // フォールバック：今まで通りJPGだけでも表示できるようにしておく
-    applyAssignments();
-  });
-}
-
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
@@ -651,8 +626,7 @@ rebuildState();
     if (!slot) return;
 
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
-    loadTexByFabricId(slot, id);       // UIサムネ用（今まで通り）
-loadPresetByFabricId(slot, id);    // ★追加：材質はこっちを使う
+    loadTexByFabricId(slot, id);
   });
 })();
 
@@ -798,77 +772,92 @@ function applyPresetToMaterial(dstMat, preset){
   
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid];
-    const st = (key && state[key]) ? state[key] : null;
-const preset = st ? st.preset : null;
-const tex = st ? st.tex : null; // presetが無いときのフォールバック用
-    if(isSupportedMat(m)){
-      if(!tex || key==='—'){
-        const orig = origMatState.get(m.uuid);
-        if(orig){
-          m.map = orig.map;
-          if(m.color){
-            if(orig.color) m.color.copy(orig.color);
-            else m.color.set(0xffffff);
-          }
-          if(typeof orig.metalness==='number') m.metalness = orig.metalness;
-          if(typeof orig.roughness==='number') m.roughness = orig.roughness;
-          m.normalMap = orig.normalMap;
-          m.aoMap = orig.aoMap;
-          m.emissiveMap = orig.emissiveMap;
-          if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
-          m.alphaMap = orig.alphaMap;
-          m.transparent = orig.transparent;
-          m.opacity = orig.opacity;
-        }else{
-          m.map = null;
-          if(m.color) m.color.set(0xffffff);
-        }
-            } else {
-        // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
-        const orig = origMatState.get(m.uuid);
-          // ★最優先：プリセットGLBが読めてるなら、そっちで材質を上書き
-  if (preset) {
-    applyPresetToMaterial(m, preset);
-  } else {
-        if (orig) {
-          m.normalMap   = orig.normalMap;
-          m.aoMap       = orig.aoMap;
-          m.emissiveMap = orig.emissiveMap;
-          m.alphaMap    = orig.alphaMap;
-          if (m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+    if(!isSupportedMat(m)) return;
 
-          // ここは好みだが、とりあえず元に戻す方が比較が正確
-          if (typeof orig.metalness === 'number') m.metalness = orig.metalness;
-          if (typeof orig.roughness === 'number') m.roughness = orig.roughness;
-          m.transparent = orig.transparent;
-          m.opacity     = orig.opacity;
+    const key = assign[m.uuid]; // 'A'|'B'|'C'|'—'|undefined
+    const st = (key && key !== '—' && state[key]) ? state[key] : null;
+    const preset = st ? st.preset : null;
+    const tex = st ? st.tex : null;
+
+    // 1) 未割当 or 「なし」 or テクスチャ未ロード → 元に戻す
+    if(!st || (!preset && !tex)){
+      const orig = origMatState.get(m.uuid);
+      if(orig){
+        m.map = orig.map || null;
+
+        if(m.color){
+          if(orig.color) m.color.copy(orig.color);
+          else m.color.set(0xffffff);
         }
 
-        // m.map = tex; の直前
-if (orig && orig.map && tex) {
-  tex.wrapS = orig.map.wrapS;
-  tex.wrapT = orig.map.wrapT;
-  if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
-  if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
-  if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
-  if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
-  tex.needsUpdate = true;
-}
+        if(typeof orig.metalness === 'number') m.metalness = orig.metalness;
+        if(typeof orig.roughness === 'number') m.roughness = orig.roughness;
 
+        m.normalMap = orig.normalMap || null;
+        m.roughnessMap = orig.roughnessMap || null;
+        m.metalnessMap = orig.metalnessMap || null;
+        if(m.normalScale && orig.normalScale) m.normalScale.copy(orig.normalScale);
 
-        m.map = tex;
+        m.aoMap = orig.aoMap || null;
+        m.emissiveMap = orig.emissiveMap || null;
+        if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
 
-        // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
-        if (m.color) m.color.set(0xffffff);
+        m.alphaMap = orig.alphaMap || null;
+        m.transparent = !!orig.transparent;
+        m.opacity = (typeof orig.opacity === 'number') ? orig.opacity : 1;
+      }else{
+        m.map = null;
+        if(m.color) m.color.set(0xffffff);
       }
 
       m.needsUpdate = true;
-      //一瞬けす
-      //if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      //if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+      return;
     }
+
+    // 2) 生地プリセットGLBがある → それを優先
+    if(preset){
+      applyPresetToMaterial(m, preset);
+      m.needsUpdate = true;
+      return;
+    }
+
+    // 3) フォールバック：JPGを貼る（従来）
+    const orig = origMatState.get(m.uuid);
+
+    // 質感系を元に戻してから貼る（のっぺり/壊れ対策）
+    if(orig){
+      m.normalMap   = orig.normalMap || null;
+      m.roughnessMap = orig.roughnessMap || null;
+      m.metalnessMap = orig.metalnessMap || null;
+      m.aoMap       = orig.aoMap || null;
+      m.emissiveMap = orig.emissiveMap || null;
+      m.alphaMap    = orig.alphaMap || null;
+
+      if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+
+      if(typeof orig.metalness === 'number') m.metalness = orig.metalness;
+      if(typeof orig.roughness === 'number') m.roughness = orig.roughness;
+
+      m.transparent = !!orig.transparent;
+      m.opacity     = (typeof orig.opacity === 'number') ? orig.opacity : 1;
+
+      // 元mapの貼り方（repeat/offset/rotation）を差し替えテクスチャにも反映
+      if(orig.map && tex){
+        tex.wrapS = orig.map.wrapS;
+        tex.wrapT = orig.map.wrapT;
+        if(tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
+        if(tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
+        if(typeof orig.map.rotation === 'number') tex.rotation = orig.map.rotation;
+        if(tex.center && orig.map.center) tex.center.copy(orig.map.center);
+        tex.needsUpdate = true;
+      }
+    }
+
+    m.map = tex;
+    if(m.color) m.color.set(0xffffff); // 色潰れ防止
+    m.needsUpdate = true;
   });
+
   saveAssignToStorage();
   debounceMaybeCapture();
 }
@@ -990,10 +979,6 @@ function clearTexture(key){
   lastOpWasNone = true;
   applyAssignments();
   msg(`生地${key}をクリアしました`);
-  if (state[key]) {
-  state[key].preset = null;
-  state[key].presetId = '';
-}
 }
 
 getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
