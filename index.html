@@ -285,10 +285,10 @@ const $ = (id)=>document.getElementById(id);
 // ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
 const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
-const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
+const patternParam = params.get('pattern') || '';    // 無ければ RI-3
 
 // いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
-let currentPatternId = patternParam;
+let currentPatternId = patternParam || 'RI-3';
 
 // ID → 画像パスを自動で組み立てる
 const FABRIC_EXT = '.jpg';
@@ -386,6 +386,9 @@ function loadModel(path){
       analyze(model);
       fit(model);
       msg('garment.glb を読み込みました');
+      // URLのfabrics指定があればA/B/Cへ適用（プリセットGLBもロード）
+      try{ initFromBase(); }catch(e){ console.warn('[initFromBase] failed', e); }
+
       loadAssignFromStorage();
       applyAssignments();
       // ★プリセットボタンを初期化
@@ -642,9 +645,11 @@ function loadPresetByFabricId(slot, id){
 
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
+// 初期stateだけ準備（pattern選択後に rebuildState() し直す）
 rebuildState();
-(function initFromBase(){
-  if (!initialFabrics.length) return;
+
+function initFromBase(){
+if (!initialFabrics.length) return;
 
   const slotOrder = getSlots();
   console.log('BASEから渡ってきた生地ID:', initialFabrics);
@@ -657,7 +662,38 @@ rebuildState();
     loadTexByFabricId(slot, id);
     loadPresetByFabricId(slot, id);
   });
-})();
+
+function startPattern(id, opts){
+  opts = opts || {};
+  id = String(id || '').trim();
+  if(!id) return;
+  const def = PATTERNS[id];
+  if(!def){ msg(`${id} は準備中です`); return; }
+
+  currentPatternId = id;
+  GLB_PATH = def.glb;
+
+  // URLを書き換え（任意）
+  if(!opts.skipUrlUpdate){
+    try{
+      const p = new URLSearchParams(location.search);
+      p.set('pattern', id);
+      history.replaceState(null, '', location.pathname + '?' + p.toString());
+    }catch(e){}
+  }
+
+  // 型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+  const keepIds = { ...slotFabricIds };
+  rebuildState();
+  const nextIds = {};
+  getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; });
+  slotFabricIds = nextIds;
+
+  document.body.classList.remove('selecting');
+  loadModel(GLB_PATH);
+}
+
+}
 
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
@@ -1382,29 +1418,16 @@ $('resetAll').addEventListener('click', ()=>{
 
   grid.addEventListener('click', (e)=>{
     const card = e.target.closest('.patternCard'); if(!card) return;
-    const id = card.dataset.id;       // "RI-3" とか
+    const id = card.dataset.id;
     console.log('[FV] pattern clicked', id);
-    const def = PATTERNS[id];
-    if (!def){ msg(`${id} は準備中です`); return; }
-
-    GLB_PATH = def.glb;
-    currentPatternId = id;
-
-    // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-// ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-const keepIds = { ...slotFabricIds };  // ← 先に退避（重要）
-
-rebuildState();
-
-const nextIds = {};
-getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; }); // ← keepIds から復元
-slotFabricIds = nextIds;
-
-document.body.classList.remove('selecting');
-loadModel(GLB_PATH);
-
-  });
+    startPattern(id);
+});
 })();
+// URLにpatternが指定されている場合は自動で3Dへ
+if (patternParam && PATTERNS[patternParam]) {
+  startPattern(patternParam, { skipUrlUpdate: true });
+}
+
 // GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
   const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
