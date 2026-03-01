@@ -503,7 +503,7 @@ function rebuildState(){
   const next = {};
   getSlots().forEach(k=>{
     // 既にあれば引き継ぎ（A/B/Cの画像を保持したい）
-    next[k] = state[k] || { tex:null, url:'' };
+    next[k] = state[k] || { tex:null, url:'', preset:null, presetId:'' };
   });
   state = next;
 }
@@ -612,6 +612,31 @@ function loadTexByFabricId(key, id){
   tryLoad(0);
 }
 
+function normalizeFabricId(id){
+  id = String(id || "").trim();
+  id = id.replace(/_([0-9]+)$/i, ""); // "_1" "_2" を剥がす
+  return id.toUpperCase();
+}
+
+function loadPresetByFabricId(slot, id){
+  if(!state[slot]) return;
+  const norm = normalizeFabricId(id);
+
+  state[slot].preset = null;
+  state[slot].presetId = norm;
+
+  loadFabricPresetById(norm).then(preset=>{
+    state[slot].preset = preset;
+    applyAssignments();
+    msg(`生地${slot}のプリセットGLBを読み込み: ${norm}`);
+  }).catch(err=>{
+    console.warn('[FAB_PRESET] load failed', norm, err);
+    state[slot].preset = null;
+    // フォールバック：今まで通りJPGだけでも表示できるようにしておく
+    applyAssignments();
+  });
+}
+
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
@@ -626,7 +651,8 @@ rebuildState();
     if (!slot) return;
 
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
-    loadTexByFabricId(slot, id);
+    loadTexByFabricId(slot, id);       // UIサムネ用（今まで通り）
+loadPresetByFabricId(slot, id);    // ★追加：材質はこっちを使う
   });
 })();
 
@@ -652,10 +678,130 @@ function prepTexture(t){
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
+
+const FAB_PRESET_DIR = './assets/fabric-presets/';
+const _fabricPresetCache = new Map(); // id -> Promise(preset)
+
+function _computeUvRepeatFromMesh(mesh){
+  try{
+    const uv = mesh.geometry?.attributes?.uv;
+    if(!uv) return { x: 1, y: 1 };
+
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+    for(let i=0; i<uv.count; i++){
+      const u = uv.getX(i), v = uv.getY(i);
+      if(u < minU) minU = u; if(u > maxU) maxU = u;
+      if(v < minV) minV = v; if(v > maxV) maxV = v;
+    }
+
+    const rx = Math.max(1, maxU - minU);
+    const ry = Math.max(1, maxV - minV);
+
+    // だいたい整数になるはずなので丸め（CLO出力の誤差対策）
+    return { x: Math.round(rx * 100) / 100, y: Math.round(ry * 100) / 100 };
+  }catch(e){
+    return { x: 1, y: 1 };
+  }
+}
+
+function loadFabricPresetById(fabricId){
+  const id = String(fabricId || '').trim();
+  if(!id) return Promise.reject(new Error('fabricId empty'));
+
+  if(_fabricPresetCache.has(id)) return _fabricPresetCache.get(id);
+
+  const p = new Promise((resolve, reject) => {
+    const url = `${FAB_PRESET_DIR}${id}.glb`;
+
+    // 既に使ってる loader があるならそれを使ってOK
+    const loader = new THREE.GLTFLoader();
+
+    loader.load(url, (gltf) => {
+      let mesh = null;
+
+      gltf.scene.traverse((o) => {
+        if(!mesh && o && o.isMesh) mesh = o;
+      });
+
+      if(!mesh) return reject(new Error(`No mesh in preset glb: ${url}`));
+
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      if(!mat) return reject(new Error(`No material in preset glb: ${url}`));
+
+      const uvRepeat = _computeUvRepeatFromMesh(mesh);
+
+      resolve({
+        id,
+        uvRepeat,            // ★これが「2cmなら5回」みたいな根拠になり得る
+        material: mat        // PBRマップをここから取る
+      });
+    }, undefined, (err) => reject(err));
+  });
+
+  _fabricPresetCache.set(id, p);
+  return p;
+}
+
+
+function _cloneTexWithRepeat(srcTex, uvRepeat){
+  if(!srcTex) return null;
+
+  const t = srcTex.clone();
+  t.image = srcTex.image; // 参照維持
+
+  // wrapはRepeat前提（タイルさせる）
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+
+  // 既にKHR_texture_transform等でrepeatが入ってる場合は“掛け算”
+  const baseRx = (t.repeat?.x ?? 1);
+  const baseRy = (t.repeat?.y ?? 1);
+  if(t.repeat) t.repeat.set(baseRx * uvRepeat.x, baseRy * uvRepeat.y);
+
+  t.needsUpdate = true;
+  return t;
+}
+
+function applyPresetToMaterial(dstMat, preset){
+  const src = preset?.material;
+  if(!dstMat || !src) return;
+
+  // 色で潰れるのを避ける（ベースカラーを白）
+  if(dstMat.color) dstMat.color.set(0xffffff);
+
+  // map類（存在するものだけ）
+  dstMat.map = _cloneTexWithRepeat(src.map, preset.uvRepeat);
+  dstMat.normalMap = _cloneTexWithRepeat(src.normalMap, preset.uvRepeat);
+  dstMat.roughnessMap = _cloneTexWithRepeat(src.roughnessMap, preset.uvRepeat);
+  dstMat.metalnessMap = _cloneTexWithRepeat(src.metalnessMap, preset.uvRepeat);
+  dstMat.aoMap = _cloneTexWithRepeat(src.aoMap, preset.uvRepeat);
+  dstMat.alphaMap = _cloneTexWithRepeat(src.alphaMap, preset.uvRepeat);
+  dstMat.emissiveMap = _cloneTexWithRepeat(src.emissiveMap, preset.uvRepeat);
+
+  // 数値系（あるならコピー）
+  if(typeof src.roughness === 'number') dstMat.roughness = src.roughness;
+  if(typeof src.metalness === 'number') dstMat.metalness = src.metalness;
+
+  if(src.normalScale && dstMat.normalScale) dstMat.normalScale.copy(src.normalScale);
+
+  // 透過系（必要なら）
+  if(typeof src.transparent === 'boolean') dstMat.transparent = src.transparent;
+  if(typeof src.opacity === 'number') dstMat.opacity = src.opacity;
+  if(typeof src.alphaTest === 'number') dstMat.alphaTest = src.alphaTest;
+
+  dstMat.needsUpdate = true;
+}
+
+
+
+  
+  
 function applyAssignments(){
   targetMats.forEach(m=>{
     const key = assign[m.uuid];
-    const tex = (key && state[key]) ? state[key].tex : null;
+    const st = (key && state[key]) ? state[key] : null;
+const preset = st ? st.preset : null;
+const tex = st ? st.tex : null; // presetが無いときのフォールバック用
     if(isSupportedMat(m)){
       if(!tex || key==='—'){
         const orig = origMatState.get(m.uuid);
@@ -681,6 +827,10 @@ function applyAssignments(){
             } else {
         // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
         const orig = origMatState.get(m.uuid);
+          // ★最優先：プリセットGLBが読めてるなら、そっちで材質を上書き
+  if (preset) {
+    applyPresetToMaterial(m, preset);
+  } else {
         if (orig) {
           m.normalMap   = orig.normalMap;
           m.aoMap       = orig.aoMap;
@@ -840,6 +990,10 @@ function clearTexture(key){
   lastOpWasNone = true;
   applyAssignments();
   msg(`生地${key}をクリアしました`);
+  if (state[key]) {
+  state[key].preset = null;
+  state[key].presetId = '';
+}
 }
 
 getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
