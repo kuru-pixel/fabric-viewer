@@ -1,7 +1,7 @@
 <!doctype html><html><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Fabric Viewer</title>
+<title>Fabric Viewer (presetGLB_build_20260301a)</title>
 <style>
   /* パネル開閉の矢印ボタンは使わないので非表示にする */
 #uiToggle,
@@ -212,7 +212,7 @@ body.selecting #patternSelect{
 <!-- ===== 左パネル ===== -->
 <div id="uiWrap">
   <div id="ui">
-    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
+    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer <span style="font-size:12px;opacity:.7">presetGLB_build_20260301a</span></div>
     <div class="btnRow">
       <button id="resetAll" title="割当を全て『なし』・白に戻す">リセット</button>
     </div>
@@ -325,6 +325,8 @@ getSlots().forEach((k, i)=>{
   slotFabricIds[k] = initialFabrics[i] || null;
 });
 
+console.log('[FV_BUILD] presetGLB_build_20260301a', location.href);
+window.__FV_BUILD__='presetGLB_build_20260301a';
 /* three.js */
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
@@ -1395,6 +1397,7 @@ loadModel(GLB_PATH);
 })();
 // ===== URLに pattern/fabrics が付いてる時は、型選択をスキップして自動で3Dへ =====
 (function autoStartFromUrl(){
+  try{
   const has = params.has('pattern') || params.has('fabrics');
   if(!has) return;
   const def = PATTERNS[currentPatternId];
@@ -1404,6 +1407,7 @@ loadModel(GLB_PATH);
   document.body.classList.remove('selecting');
   GLB_PATH = def.glb;
   loadModel(GLB_PATH);
+  }catch(e){ console.error('[FV] autoStart error', e); }
 })();
 
 // GLBから2Dサムネを生成（フォールバック）
