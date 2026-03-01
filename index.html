@@ -511,7 +511,7 @@ function rebuildState(){
 
 let thumbsGenerated = false;
 function hasAllTextures(){
-  return !!((state.A.preset || state.A.tex) && (state.B.preset || state.B.tex) && (state.C.preset || state.C.tex));
+  return !!(state.A.tex && state.B.tex && state.C.tex);
 }
 
 
@@ -611,32 +611,34 @@ function loadTexByFabricId(key, id){
 
   tryLoad(0);
 }
-// ===== 生地プリセットGLB（材質）を読む =====
+
+
 function normalizeFabricId(id){
   id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, "");   // "_1" "_2" を剥がす
+  id = id.replace(/_([0-9]+)$/i, ""); // "_1" "_2" を剥がす
   return id.toUpperCase();
 }
 
+// ===== 生地プリセットGLB（材質）を読む =====
 function loadPresetByFabricId(slot, id){
   if(!state[slot]) return;
-  const norm = normalizeFabricId(id);
 
+  const norm = normalizeFabricId(id);
   state[slot].preset = null;
   state[slot].presetId = norm;
 
   loadFabricPresetById(norm).then(preset=>{
     state[slot].preset = preset;
-    console.log("[FAB_PRESET OK]", slot, norm);
+    // プレビュー（JPG）が無い場合は空のままでOK
     applyAssignments();
+    msg(`生地${slot}プリセットGLBを読み込み: ${norm}`);
+    console.log("[FAB_PRESET OK]", slot, norm, preset);
   }).catch(err=>{
     console.warn("[FAB_PRESET NG]", slot, norm, err);
     state[slot].preset = null;
-    applyAssignments();
+    msg(`プリセットGLBが読めません: ${norm}`);
   });
 }
-
-
 
 // ===== URLから渡された生地を A/B/C に自動セット =====
 rebuildState();
@@ -652,774 +654,8 @@ rebuildState();
 
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
     loadPresetByFabricId(slot, id);
-});
-})();
-
-const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
-const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
-
-function saveAssignToStorage(){ try{ localStorage.setItem(LS_KEYS.assign, JSON.stringify(assign)); }catch(e){} }
-function loadAssignFromStorage(){
-  try{
-    const raw = localStorage.getItem(LS_KEYS.assign);
-    if(!raw) return;
-    const obj = JSON.parse(raw);
-    Object.keys(obj).forEach(k=>{ assign[k] = obj[k]; });
-  }catch(e){}
-}
-
-
-
-
-function prepTexture(t){
-  if(!t) return;
-  if (t.colorSpace!==undefined) t.colorSpace=THREE.SRGBColorSpace;
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;
-  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
-}
-
-const FAB_PRESET_DIR = './assets/fabric-presets/';
-const _fabricPresetCache = new Map(); // id -> Promise(preset)
-
-function _computeUvRepeatFromMesh(mesh){
-  try{
-    const uv = mesh.geometry?.attributes?.uv;
-    if(!uv) return { x: 1, y: 1 };
-
-    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-    for(let i=0; i<uv.count; i++){
-      const u = uv.getX(i), v = uv.getY(i);
-      if(u < minU) minU = u; if(u > maxU) maxU = u;
-      if(v < minV) minV = v; if(v > maxV) maxV = v;
-    }
-
-    const rx = Math.max(1, maxU - minU);
-    const ry = Math.max(1, maxV - minV);
-
-    // だいたい整数になるはずなので丸め（CLO出力の誤差対策）
-    return { x: Math.round(rx * 100) / 100, y: Math.round(ry * 100) / 100 };
-  }catch(e){
-    return { x: 1, y: 1 };
-  }
-}
-
-function loadFabricPresetById(fabricId){
-  const id = String(fabricId || '').trim();
-  if(!id) return Promise.reject(new Error('fabricId empty'));
-
-  if(_fabricPresetCache.has(id)) return _fabricPresetCache.get(id);
-
-  const p = new Promise((resolve, reject) => {
-    const url = `${FAB_PRESET_DIR}${id}.glb`;
-
-    // 既に使ってる loader があるならそれを使ってOK
-    const loader = new THREE.GLTFLoader();
-
-    loader.load(url, (gltf) => {
-      let mesh = null;
-
-      gltf.scene.traverse((o) => {
-        if(!mesh && o && o.isMesh) mesh = o;
-      });
-
-      if(!mesh) return reject(new Error(`No mesh in preset glb: ${url}`));
-
-      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-      if(!mat) return reject(new Error(`No material in preset glb: ${url}`));
-
-      const uvRepeat = _computeUvRepeatFromMesh(mesh);
-
-      resolve({
-        id,
-        uvRepeat,            // ★これが「2cmなら5回」みたいな根拠になり得る
-        material: mat        // PBRマップをここから取る
-      });
-    }, undefined, (err) => reject(err));
+    // loadTexByFabricId(slot, id); // JPGフォールバック（必要なら）
   });
-
-  _fabricPresetCache.set(id, p);
-  return p;
-}
-
-
-function _cloneTexWithRepeat(srcTex, uvRepeat){
-  if(!srcTex) return null;
-
-  // GLB内で外部参照が切れている等で image が無い場合は貼らない（真っ黒/警告回避）
-  if(!srcTex.image) return null;
-
-  const t = srcTex.clone();
-  t.image = srcTex.image; // 参照維持
-
-  t.wrapS = THREE.RepeatWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-
-  const rx = (uvRepeat?.x ?? 1);
-  const ry = (uvRepeat?.y ?? 1);
-
-  // 既にKHR_texture_transform等でrepeatが入ってる場合は“掛け算”
-  const baseRx = (t.repeat?.x ?? 1);
-  const baseRy = (t.repeat?.y ?? 1);
-  if(t.repeat) t.repeat.set(baseRx * rx, baseRy * ry);
-
-  t.needsUpdate = true;
-  return t;
-}
-<!doctype html><html><head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Fabric Viewer</title>
-<style>
-  /* パネル開閉の矢印ボタンは使わないので非表示にする */
-#uiToggle,
-#reopen {
-  display: none !important;
-}
-
-  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui;
-            background: radial-gradient(1200px 800px at 60% 40%, #ffffff 0%, #eef1f5 60%, #dde2ea 100%);}
-  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
-
-  /* ==== 左パネル（開閉スライド） ==== */
-  #uiWrap{position:fixed;z-index:5;top:10px;left:10px;display:flex;align-items:flex-start;transition:transform .25s ease}
-  #ui{
-    background:rgba(20,20,22,.55);color:#fff;padding:14px;border-radius:16px;max-width:420px;
-    border:1px solid rgba(255,255,255,.16);backdrop-filter: blur(10px) saturate(120%);
-    box-shadow: 0 10px 30px rgba(0,0,0,.25);}
-  #ui label{display:block;font-size:12px;margin:6px 0 4px}
-  .btnRow{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
-  .mini{margin-left:6px;font-size:12px;padding:2px 6px}
-  #uiToggle{margin-left:6px;align-self:center;cursor:pointer;border:none;outline:none;width:32px;height:56px;border-radius:8px;
-    background:#e23;color:#fff;font-size:20px;line-height:56px;text-align:center;user-select:none;box-shadow:0 2px 8px #0006;
-    position:absolute; top:50%; transform:translateY(-50%);}
-  #uiWrap.collapsed{transform:translateX(calc(-100% + 32px))}
-  #uiWrap.collapsed #uiToggle{position: fixed;left: 8px;top: 50%;transform: translateY(-50%);z-index: 6;width: 40px;height: 64px;font-size:22px;border-radius:10px;}
-  .block{margin-top:8px;padding:8px;border:1px solid #ffffff22;border-radius:8px}
-  .block h4{margin:0 0 4px 0;font-size:13px}
-  #footer{position:fixed;right:10px;bottom:10px;z-index:4;font-size:12px;background:#0b0b0bcc;color:#fff;padding:6px 10px;border-radius:8px}
-  #msg{position:fixed;z-index:6;bottom:10px;left:50%;transform:translateX(-50%);background:#0009;color:#fff;padding:6px 10px;border-radius:8px;font-size:12px}
-
-  /* ==== クリック時の吹き出し ==== */
-  #bubble{position:fixed; z-index:7; display:none; transform:translate(-50%,-115%); pointer-events:auto;
-    background:#111e; color:#fff; backdrop-filter: blur(4px);border:1px solid #fff3; border-radius:10px; padding:6px 8px; box-shadow:0 4px 16px #0008;}
-  #bubble .row{display:flex; gap:6px; align-items:center; flex-wrap:wrap; max-width:320px}
-  .chip{
-  position:relative;                /* 追加 */
-  width:56px;
-  height:56px;
-  border-radius:8px;
-  border:1px solid #fff5;
-  background:#222 center/cover no-repeat;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:700;
-  letter-spacing:.5px;
-}
-/* 右下の A/B/C ラベル */
-.chip-tag{
-  position:absolute;
-  right:4px;
-  bottom:4px;
-  padding:2px 4px;
-  font-size:10px;
-  border-radius:4px;
-  background:rgba(0,0,0,.75);
-  color:#fff;
-}
-
-  .chip.none{background:#222}
-  .chip:hover{outline:2px solid #fff9}
-
-  /* ==== 右上：履歴サムネ ==== */
-  #shots{position:fixed; z-index:8; top:10px; right:10px; display:flex; gap:8px; flex-direction:row-reverse; pointer-events:auto;}
-  #shots img{width:96px; height:96px; object-fit:cover; border-radius:10px; border:1px solid #ffffff55;background:#111c; box-shadow:0 2px 10px #0008; cursor:pointer;}
-  #shots img:hover{ outline:2px solid #fff9 }
-
-  /* パネル再表示用ボタン */
-  #reopen{position:fixed; left:8px; top:50%; transform:translateY(-50%);
-    width:40px; height:64px; border:none; border-radius:10px;background:#e23; color:#fff; font-size:22px; line-height:64px; text-align:center;
-    box-shadow:0 2px 10px #0008; z-index:9999; cursor:pointer; display:none;}
-  body.panel-collapsed #reopen{ display:block; }
-
-  /* ほんのりビネット */
-  body::after{content:""; position:fixed; inset:0; pointer-events:none;
-    background: radial-gradient(1200px 800px at 60% 40%, rgba(0,0,0,0) 55%, rgba(0,0,0,.06) 100%);mix-blend-mode:multiply;}
-
-  /* ===== 型選択UI（selecting中だけ表示） ===== */
-  body.selecting #uiWrap,
-  body.selecting #uiToggle,
-  body.selecting #reopen,
-  body.selecting #shots,
-  body.selecting #bubble,
-  body.selecting #footer,
-  body.selecting #msg,
-  body.selecting canvas#c { display:none !important; }
-
-  #patternSelect{position:fixed; inset:0; z-index:20; display:none; place-items:center;}
-  /* selecting クラスが付いているときだけ表示 */
-body.selecting #patternSelect{
-  display:grid;
-}
-  #backHomeBtn {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  padding: 8px 14px;
-  font-size: 14px;
-  color: #fff;
-  background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 6px;
-  cursor: pointer;
-  z-index: 9999;
-  backdrop-filter: blur(4px);
-  transition: background 0.2s;
-}
-
-#backHomeBtn:hover {
-  background: rgba(255,255,255,0.15);
-}
-
-  #patternSelect .wrap{width:min(1100px, 92vw);}
-  #patternSelect h1{margin:0 0 18px; font-weight:700; letter-spacing:.02em;font-size:clamp(20px, 3.2vw, 32px); color:#222a; text-align:center;}
-  #patternGrid{display:grid; gap:14px; grid-template-columns: repeat(4, 1fr);}
-  .patternCard{display:flex; flex-direction:column; gap:8px;padding:12px; border-radius:14px;background:#fff8; border:1px solid #0001; backdrop-filter:blur(8px);
-    box-shadow:0 6px 18px rgba(0,0,0,.12);cursor:pointer; transition:transform .08s ease, box-shadow .2s ease;}
-  .patternCard:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.18); }
-  .patternCard .name{ font-weight:700; color:#222; }
-  .patternCard .thumb{aspect-ratio: 4/3; border-radius:10px; border:1px dashed #0002; background:#f6f7fa center/contain no-repeat;}
-  .patternCard.disabled{ opacity:.45; cursor:not-allowed; }
-  .patternCard.disabled .thumb{ background:#f6f7fa; border-style:solid; }
-
-
-
-
-  /* ==== 下部 プリセットパターン ==== */
-#presets{
-  position:fixed;
-  left:50%;
-  bottom:20px;
-  transform:translateX(-50%);
-  display:flex;
-  gap:12px;
-  z-index:5;
-}
-
-.presetCard{
-  position:relative;
-  width:160px;      /* ちょい大きく */
-  height:110px;     /* ちょい大きく */
-  border-radius:10px;
-  border:1px solid #0002;
-  background:#fff;  /* 背景を白に */
-  cursor:pointer;
-  overflow:hidden;
-  opacity:.9;
-}
-.presetCard.active{
-  opacity:1;
-}
-
-/* サムネ画像部分（白背景＋服を少し大きめに見せる） */
-.presetThumb{
-  position:absolute;
-  inset:0;
-
-  /* 背景は白のまま */
-  background-color:#fff;
-
-  /* ★ここがポイント */
-  background-position:center;
-  background-repeat:no-repeat;
-
-  /* cover → contain だと小さくなるので使わない */
-  background-size: 300% auto; /* ← これで服だけ大きく見える */
-}
-
-/* 下部のラベル（このままでOK） */
-.presetLabel{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  padding:4px 6px;
-  font-size:11px;
-  color:#000;
-  text-align:center;
-  background:linear-gradient(to top, rgba(255,255,255,.9), rgba(255,255,255,0));
-}
-
-.presetCard.active .presetThumb{
-  outline:2px solid #000;
-}
-
-  
-</style>
-</head>
-<body class="selecting">
-
-<!-- 型選択レイヤー -->
-<div id="patternSelect">
-  <div class="wrap">
-    <h1>どの服を作製しますか？</h1>
-    <div id="patternGrid">
-      <button class="patternCard" data-id="RI-1"><div class="name">RI-1</div><div class="thumb" id="thumb-RI1"></div></button>
-      <button class="patternCard" data-id="RI-2"><div class="name">RI-2</div><div class="thumb" id="thumb-RI2"></div></button>
-      <button class="patternCard" data-id="RI-3"><div class="name">RI-3</div><div class="thumb" id="thumb-RI3"></div></button>
-      <button class="patternCard" data-id="RI-4"><div class="name">RI-4</div><div class="thumb" id="thumb-RI4"></div></button>
-      <button class="patternCard" data-id="RI-5"><div class="name">RI-5</div><div class="thumb" id="thumb-RI5"></div></button>
-      <button class="patternCard" data-id="RISC-Setup"><div class="name">RISC-Setup</div><div class="thumb" id="thumb-RISC"></div></button>
-
-    </div>
-  </div>
-</div>
-
-<!-- ===== 左パネル ===== -->
-<div id="uiWrap">
-  <div id="ui">
-    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
-    <div class="btnRow">
-      <button id="resetAll" title="割当を全て『なし』・白に戻す">リセット</button>
-    </div>
-
-
-    <!-- A〜E（倍率/回転は削除済み） -->
-<div class="block">
-  <h4>生地A</h4>
-  <div class="btnRow">
-    <!-- ここが生地選択ページに飛ぶボタンになる -->
-    <button id="changeA" type="button">生地を変更</button>
-    <button id="clearA" class="mini" type="button">クリアA</button>
-  </div>
-</div>
-
-<div class="block">
-  <h4>生地B</h4>
-  <div class="btnRow">
-    <button id="changeB" type="button">生地を変更</button>
-    <button id="clearB" class="mini" type="button">クリアB</button>
-  </div>
-</div>
-
-<div class="block">
-  <h4>生地C</h4>
-  <div class="btnRow">
-    <button id="changeC" type="button">生地を変更</button>
-    <button id="clearC" class="mini" type="button">クリアC</button>
-  </div>
-</div>
-
-
-  <!--   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>  -->
-  </div>
-</div>
-
-
-<!-- 右上：履歴サムネ -->
-<div id="shots"></div>
-
-<!-- クリック位置に出る吹き出し -->
-<div id="bubble">
-  <div style="font-size:12px;margin-bottom:4px">生地を割り当て</div>
-<div class="row">
-  <button class="chip" id="pickA"><span class="chip-tag">A</span></button>
-  <button class="chip" id="pickB"><span class="chip-tag">B</span></button>
-  <button class="chip" id="pickC"><span class="chip-tag">C</span></button>
-  <button class="chip none" id="pickNone">なし</button>
-</div>
-</div>
-
-<div id="presets"></div>
-
-<div id="footer">ドラッグで回転 / ホイールでズーム</div>
-<div id="backHomeBtn">← ホームへ戻る</div>
-<div id="msg" hidden></div>
-<canvas id="c"></canvas>
-
-
-<script src="./assets/threejs/three.min.js"></script>
-<script src="./assets/threejs/GLTFLoader.js"></script>
-<script src="./assets/threejs/OrbitControls.js"></script>
-<script>
-/* ========= 基本 ========= */
-let GLB_PATH = null;
-const $ = (id)=>document.getElementById(id);
-
-// ===== URLパラメータ（生地IDと型ID） =====
-const params = new URLSearchParams(window.location.search);
-const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
-const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
-
-// いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
-let currentPatternId = patternParam;
-
-// ID → 画像パスを自動で組み立てる
-const FABRIC_EXT = '.jpg';
-function fabricIdToUrl(id) {
-  return `./assets/fabrics/${id}${FABRIC_EXT}`;
-}
-
-// 型ごとの定義
-const PATTERNS = {
-  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
-  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
-};
-
-function getSlots(){
-  const def = PATTERNS[currentPatternId];
-  return (def && Array.isArray(def.slots) && def.slots.length) ? def.slots : ['A','B','C'];
-}
-
-// URL から渡ってきた生地ID（スロット数に合わせる）
-const EMPTY = "-";
-const initialFabrics = fabricsParam
-  ? fabricsParam
-      .split(',')
-      .map(s => String(s || "").trim())
-      .slice(0, getSlots().length)
-      .map(s => (!s || s === EMPTY || s.toLowerCase() === "null") ? null : s.toUpperCase())
-  : [];
-
-// 各スロットに今どの生地IDが入っているか
-let slotFabricIds = {}; // ★動的に作る
-getSlots().forEach((k, i)=>{
-  slotFabricIds[k] = initialFabrics[i] || null;
-});
-
-/* three.js */
-const canvas = $('c');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.9;
-if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-const scene = new THREE.Scene(); scene.background = null;
-const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.set(0,1.6,3.2);
-const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
-scene.add(camera);
-scene.add(new THREE.HemisphereLight(0xffffff,0x223,0.45));
-
-const dir = new THREE.DirectionalLight(0xfff2e0, 0.85);
-dir.castShadow = true;
-dir.position.set(1, 1, 1).multiplyScalar(10);
-const camAim = new THREE.Object3D(); camAim.position.set(0,0,-1); camera.add(camAim);
-dir.target = camAim; camera.add(dir);
-dir.shadow.mapSize.set(1024,1024); dir.shadow.camera.near=0.1; dir.shadow.camera.far=20; dir.shadow.bias=-0.0005;
-
-const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-3,2.5,-2); scene.add(fill);
-const rim  = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(0,3,-4); scene.add(rim);
-
-controls.enablePan = false; if ('zoomToCursor' in controls) controls.zoomToCursor = false;
-
-/* モデル */
-let model, targetMats = [];
-let origMatState = new Map(); // uuid -> original material snapshot
-
-/* モデルを読む関数（選択後に呼ぶ） */
-function loadModel(path){
-
-    // ★追加：前のモデルを消す
-  if (model && model.parent) {
-    scene.remove(model);
-    model = null;
-  }
-  targetMats = [];
-  Object.keys(assign).forEach(k => delete assign[k]); // 割当もリセットしたいなら
-  
-  const loader = new THREE.GLTFLoader();
-  loader.load(
-    path,
-    (glb) => {
-      const json = glb.parser?.json || {};
-      console.log('[GLB INFO] extensionsUsed:', json.extensionsUsed || []);
-      console.table((json.images || []).map((im,i)=>({i, mime:im.mimeType||'(unknown)', uri:im.uri?im.uri:'(embedded)'})));
-      window.__glbinfo = { used: json.extensionsUsed||[], images: json.images||[] };
-
-      model = glb.scene;
-      scene.add(model);
-      enableShadows(model);
-      addGroundUnder(model);
-      analyze(model);
-      fit(model);
-      msg('garment.glb を読み込みました');
-      loadAssignFromStorage();
-      applyAssignments();
-      // ★プリセットボタンを初期化
-      initPresetButtons();
-
-      applyPatternByIndex(0);   // デフォルト：パターン1 (A-B-C)
-      setActivePreset(0);
-      generateAllPresetThumbs();
-    },
-    undefined,
-    (err) => {
-      console.error('GLB load failed:', err);
-      msg('GLB読み込みエラー： ' + (err?.message || err));
-      const g = new THREE.BoxGeometry(1, 1.2, 0.5);
-      const m = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.1, roughness: 0.7 });
-      const cube = new THREE.Mesh(g, m);
-      scene.add(cube);
-      targetMats = [cube.material];
-      enableShadows(cube);
-      addGroundUnder(cube);
-      updateMatInfo();
-      loadAssignFromStorage();
-      applyAssignments();
-      msg('assets/garment.glb が無い/読めないのでキューブ表示');
-    }
-  );
-}
-
-// ----- 影用ユーティリティ -----
-function enableShadows(root){
-  root.traverse(o=>{
-    if(o.isMesh){ o.castShadow = true; o.receiveShadow = false; }
-  });
-}
-
-let ground;
-function addGroundUnder(root){
-  if(ground && ground.parent) ground.parent.remove(ground);
-  const box = new THREE.Box3().setFromObject(root);
-  const minY = box.min.y;
-  const g = new THREE.PlaneGeometry(20, 20);
-  const m = new THREE.ShadowMaterial({ opacity: 0.25 });
-  ground = new THREE.Mesh(g, m);
-  ground.rotation.x = -Math.PI/2;
-  ground.position.set(0, minY - 0.002, 0);
-  ground.receiveShadow = true;
-  ground.userData.ground = true;
-  scene.add(ground);
-}
-
-/* ===== ユーティリティ ===== */
-function isSupportedMat(m){
-  return !!m && (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial || m.isMeshBasicMaterial);
-}
-const materialUseCount = new Map();
-function analyze(root){
-  const mats=new Set(); materialUseCount.clear();
-  root.traverse(o=>{
-    if(o.isMesh && o.material){
-      if(Array.isArray(o.material)){
-        o.material.forEach(m=>{ if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }});
-      }else{
-        const m=o.material; if(m){ mats.add(m); materialUseCount.set(m.uuid,(materialUseCount.get(m.uuid)||0)+1); }
-      }
-    }
-  });
-  targetMats = Array.from(mats).filter(isSupportedMat);
-
-  // snapshot originals so unassigned mats (buttons/topstitch etc) can be restored
-  origMatState = new Map();
-for (const m of targetMats) {
-  origMatState.set(m.uuid, {
-    map: m.map || null,
-    color: (m.color && m.color.clone) ? m.color.clone() : null,
-
-    metalness: (typeof m.metalness === 'number') ? m.metalness : undefined,
-    roughness: (typeof m.roughness === 'number') ? m.roughness : undefined,
-
-    // ★ここが崩れてた
-    normalMap: m.normalMap || null,
-    roughnessMap: m.roughnessMap || null,
-    metalnessMap: m.metalnessMap || null,
-    normalScale: (m.normalScale && m.normalScale.clone) ? m.normalScale.clone() : null,
-
-    aoMap: m.aoMap || null,
-    emissiveMap: m.emissiveMap || null,
-    emissive: (m.emissive && m.emissive.clone) ? m.emissive.clone() : null,
-
-    alphaMap: m.alphaMap || null,
-    transparent: !!m.transparent,
-    opacity: (typeof m.opacity === 'number') ? m.opacity : 1
-  });
-}
-
-
-
-  updateMatInfo();
-}
-function updateMatInfo(){
-  const el = $('matinfo');
-  if (el) el.textContent = `適用対象: ${targetMats.length} material(s)`;
-}
-function fit(obj){
-  const box=new THREE.Box3().setFromObject(obj),
-        size=box.getSize(new THREE.Vector3()).length(),
-        center=box.getCenter(new THREE.Vector3());
-  controls.target.copy(center);
-  const dist=size*0.6/Math.tan((Math.PI*camera.fov)/360);
-  camera.position.copy(center.clone().add(new THREE.Vector3(0,size*0.1,dist)));
-  camera.near=size/100; camera.far=size*10; camera.updateProjectionMatrix(); controls.update();
-}
-
-const texLoader = new THREE.TextureLoader();
-let state = {}; // ★動的に作る
-
-function rebuildState(){
-  const next = {};
-  getSlots().forEach(k=>{
-    // 既にあれば引き継ぎ（A/B/Cの画像を保持したい）
-    next[k] = state[k] || { tex:null, url:'', preset:null, presetId:'' };
-  });
-  state = next;
-}
-
-
-let thumbsGenerated = false;
-function hasAllTextures(){
-  return !!((state.A.preset || state.A.tex) && (state.B.preset || state.B.tex) && (state.C.preset || state.C.tex));
-}
-
-
-
-  
-function normalizeMatName(name){
-  return String(name ?? "")
-    .trim()
-    .replace(/\s*\(.*\)\s*$/, "")   // 末尾の (xxx) を削る保険
-    .replace(/\.\d{3}\s*$/, "");    // .001 .002 みたいなBlender系サフィックスを削る
-}
-
-
-
-  
-// ===== パーツを3つのゾーン(Z1/Z2/Z3)に分けるための設定 =====
-// ★ key は material.name でも material.uuid でもOK（どちらでもマッチ）
-
-const MAT_ZONE_BY_PATTERN = {
-  'RI-1': {
-    'Nylon_Featherweight Copy 1_2712': 'Z1',
-    'Nylon_Featherweight Copy 1 コピー 1_2720': 'Z2',
-    'Nylon_Featherweight_2703': 'Z3',
-    // 生地C (Z3) は「それ以外の布系マテリアル」に自動適用（下の applyPatternByIndex を参照）
-  },
-  'RI-2':  {
-    'Cotton_50s_Poplin_2829': 'Z1',
-    'Cotton_50s_Poplin_2822': 'Z2',
-    'Cotton_50s_Poplin_2813': 'Z3',
-  },
-  'RI-3': {
-    'Nylon_Featherweight_152080': 'Z1',
-    'Nylon_Featherweight Copy 2_152118': 'Z2',
-    'Nylon_Featherweight Copy 1_152099': 'Z3',
-  },
-  'RI-4': {
-    'P-67_3028': 'Z1',
-    'P-74_3056': 'Z2',
-    'P-71_3000': 'Z3',
-  },
-  'RI-5': {
-    'S-150_2803': 'Z1',
-    'S-119_2779': 'Z2',
-    'S-121_2791': 'Z3',
-  },
-  'RISC-Setup': {},
-};
-
-  
-// ===== URLから生地画像を読み込む =====
-function loadTexFromUrlFor(key, url, onDone){
-  if(!state[key]) return;
-  state[key].url=url;
-  state[key].tex = texLoader.load(url, ()=>{
-    prepTexture(state[key].tex);
-    applyAssignments();
-    updateBubblePreviews();
-    msg(`生地${key}を読み込みました`);
-    generateAllPresetThumbs();
-    onDone && onDone(null, url);
-  }, undefined, (err)=>{
-    console.warn('Texture load failed:', url, err);
-    onDone && onDone(err, url);
-  });
-}
-
-// Allow fallback for fabrics stored as "<id>_1.jpg" etc.
-function loadTexByFabricId(key, id){
-  id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, "");   // "_1" "_2" を剥がす
-  id = id.toUpperCase();
-
-  // _2 → _1 → 通常 の順
-  const stems = [`${id}_2`, `${id}_1`, `${id}`];
-
-  // ★追加：拡張子/大文字小文字もフォールバック（GitHub Pagesは大小区別される）
-  const exts = ["jpg", "JPG", "jpeg", "png", "webp"];
-
-  const urls = [];
-  for(const s of stems){
-    for(const ext of exts){
-      urls.push(`./assets/fabrics/${s}.${ext}`);
-    }
-  }
-
-  const tryLoad = (i)=>{
-    if(i >= urls.length){
-      msg(`生地画像が見つかりません: ${id}`);
-      return;
-    }
-    loadTexFromUrlFor(key, urls[i], (err)=>{
-      if(err) return tryLoad(i+1);
-      // 成功した実URLをログに残す（あとで整理しやすい）
-      console.log("[FABRIC OK]", key, urls[i]);
-    });
-  };
-
-  tryLoad(0);
-}
-// ===== 生地プリセットGLB（材質）を読む =====
-function normalizeFabricId(id){
-  id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, "");   // "_1" "_2" を剥がす
-  return id.toUpperCase();
-}
-
-function loadPresetByFabricId(slot, id){
-  if(!state[slot]) return;
-  const norm = normalizeFabricId(id);
-
-  state[slot].preset = null;
-  state[slot].presetId = norm;
-
-  loadFabricPresetById(norm).then(preset=>{
-    state[slot].preset = preset;
-    console.log("[FAB_PRESET OK]", slot, norm);
-    applyAssignments();
-  }).catch(err=>{
-    console.warn("[FAB_PRESET NG]", slot, norm, err);
-    state[slot].preset = null;
-    applyAssignments();
-  });
-}
-
-
-
-// ===== URLから渡された生地を A/B/C に自動セット =====
-rebuildState();
-(function initFromBase(){
-  if (!initialFabrics.length) return;
-
-  const slotOrder = getSlots();
-  console.log('BASEから渡ってきた生地ID:', initialFabrics);
-
-  initialFabrics.forEach((id, idx)=>{
-    const slot = slotOrder[idx];
-    if (!slot) return;
-
-    slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
-    loadPresetByFabricId(slot, id);
-});
 })();
 
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
@@ -1532,17 +768,10 @@ function applyPresetToMaterial(dstMat, preset){
   const src = preset?.material;
   if(!dstMat || !src) return;
 
-    // 色（mapがある時は白、mapが無い時はsrc.colorを優先）
-  if(dstMat.color){
-    if(src.map && src.map.image){
-      dstMat.color.set(0xffffff);
-    }else if(src.color){
-      dstMat.color.copy(src.color);
-    }else{
-      dstMat.color.set(0xffffff);
-    }
-  }
-// map類（存在するものだけ）
+  // 色で潰れるのを避ける（ベースカラーを白）
+  if(dstMat.color) dstMat.color.set(0xffffff);
+
+  // map類（存在するものだけ）
   dstMat.map = _cloneTexWithRepeat(src.map, preset.uvRepeat);
   dstMat.normalMap = _cloneTexWithRepeat(src.normalMap, preset.uvRepeat);
   dstMat.roughnessMap = _cloneTexWithRepeat(src.roughnessMap, preset.uvRepeat);
@@ -1551,14 +780,9 @@ function applyPresetToMaterial(dstMat, preset){
   dstMat.alphaMap = _cloneTexWithRepeat(src.alphaMap, preset.uvRepeat);
   dstMat.emissiveMap = _cloneTexWithRepeat(src.emissiveMap, preset.uvRepeat);
 
-  // 数値系（布寄りのデフォルトに寄せる：金属感で真っ黒になりやすいのを防ぐ）
-  // roughness/metalnessMap がある場合は基本そのmapが主導。値は補助。
-  dstMat.metalness = 0.0;
-  dstMat.roughness = 1.0;
-
+  // 数値系（あるならコピー）
   if(typeof src.roughness === 'number') dstMat.roughness = src.roughness;
-  // metalnessは基本0固定（布前提）。もし必要ならここを解除。
-  // if(typeof src.metalness === 'number') dstMat.metalness = src.metalness;
+  if(typeof src.metalness === 'number') dstMat.metalness = src.metalness;
 
   if(src.normalScale && dstMat.normalScale) dstMat.normalScale.copy(src.normalScale);
 
@@ -1576,88 +800,89 @@ function applyPresetToMaterial(dstMat, preset){
   
 function applyAssignments(){
   targetMats.forEach(m=>{
-    const key = assign[m.uuid];
+    const key = assign[m.uuid]; // 'A'|'B'|'C'|'—'|undefined
     const st = (key && state[key]) ? state[key] : null;
-    const preset = st ? st.preset : null;
-    const tex = st ? st.tex : null;
-    if(isSupportedMat(m)){
-      if((!tex && !preset) || key==='—'){
-        const orig = origMatState.get(m.uuid);
-        if(orig){
-          m.map = orig.map;
-          if(m.color){
-            if(orig.color) m.color.copy(orig.color);
-            else m.color.set(0xffffff);
-          }
-          if(typeof orig.metalness==='number') m.metalness = orig.metalness;
-          if(typeof orig.roughness==='number') m.roughness = orig.roughness;
-          m.normalMap = orig.normalMap;
-          m.aoMap = orig.aoMap;
-          m.emissiveMap = orig.emissiveMap;
-          if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
-          m.alphaMap = orig.alphaMap;
-          m.transparent = orig.transparent;
-          m.opacity = orig.opacity;
-        }else{
-          m.map = null;
-          if(m.color) m.color.set(0xffffff);
+    const preset = (key && st) ? st.preset : null;
+    const tex = (key && st) ? st.tex : null; // フォールバック用（JPG）
+
+    if(!isSupportedMat(m)) return;
+
+    // ---- なし or 未割当：元のGLB状態へ戻す ----
+    if(!key || key === '—' || (!preset && !tex)){
+      const orig = origMatState.get(m.uuid);
+      if(orig){
+        m.map = orig.map || null;
+        if(m.color){
+          if(orig.color) m.color.copy(orig.color);
+          else m.color.set(0xffffff);
         }
-            } else {
-        // ★プリセットGLBが読めている場合は、それを最優先で適用
-        if(preset){
-          applyPresetToMaterial(m, preset);
-        } else {
-        // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
-        const orig = origMatState.get(m.uuid);
-        if (orig) {
-          m.normalMap   = orig.normalMap;
-          m.aoMap       = orig.aoMap;
-          m.emissiveMap = orig.emissiveMap;
-          m.alphaMap    = orig.alphaMap;
-          if (m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+        if(typeof orig.metalness==='number') m.metalness = orig.metalness;
+        if(typeof orig.roughness==='number') m.roughness = orig.roughness;
 
-          // ここは好みだが、とりあえず元に戻す方が比較が正確
-          if (typeof orig.metalness === 'number') m.metalness = orig.metalness;
-          if (typeof orig.roughness === 'number') m.roughness = orig.roughness;
-          m.transparent = orig.transparent;
-          m.opacity     = orig.opacity;
-        }
+        m.normalMap = orig.normalMap || null;
+        m.roughnessMap = orig.roughnessMap || null;
+        m.metalnessMap = orig.metalnessMap || null;
+        if(m.normalScale && orig.normalScale) m.normalScale.copy(orig.normalScale);
 
-        // m.map = tex; の直前
-if (orig && orig.map && tex) {
-  tex.wrapS = orig.map.wrapS;
-  tex.wrapT = orig.map.wrapT;
-  if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
-  if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
-  if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
-  if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
-  tex.needsUpdate = true;
-}
+        m.aoMap = orig.aoMap || null;
+        m.emissiveMap = orig.emissiveMap || null;
+        if(m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
 
-
-        m.map = tex;
-
-        // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
-        if (m.color) m.color.set(0xffffff);
+        m.alphaMap = orig.alphaMap || null;
+        m.transparent = !!orig.transparent;
+        m.opacity = (typeof orig.opacity === 'number') ? orig.opacity : 1;
+      }else{
+        m.map = null;
+        if(m.color) m.color.set(0xffffff);
       }
-        }
+      m.needsUpdate = true;
+      return;
+    }
+
+    // ---- 優先：プリセットGLB（材質）を適用 ----
+    if(preset){
+      applyPresetToMaterial(m, preset);
+
+      // 布が真っ黒になりやすいのを防ぐ（環境マップ無しでも破綻しにくい）
+      if(typeof m.metalness === 'number') m.metalness = 0;
+      if(typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.75);
 
       m.needsUpdate = true;
-      //一瞬けす
-      //if(typeof m.metalness==='number') m.metalness=Math.min(m.metalness,0.15);
-      //if(typeof m.roughness==='number') m.roughness=Math.max(m.roughness,0.6);
+      return;
     }
+
+    // ---- フォールバック：JPG（従来方式） ----
+    const orig = origMatState.get(m.uuid);
+    if(orig){
+      m.normalMap   = orig.normalMap;
+      m.aoMap       = orig.aoMap;
+      m.emissiveMap = orig.emissiveMap;
+      m.alphaMap    = orig.alphaMap;
+      if (m.emissive && orig.emissive) m.emissive.copy(orig.emissive);
+      if (typeof orig.metalness === 'number') m.metalness = orig.metalness;
+      if (typeof orig.roughness === 'number') m.roughness = orig.roughness;
+      m.transparent = orig.transparent;
+      m.opacity     = orig.opacity;
+    }
+
+    if (orig && orig.map && tex) {
+      tex.wrapS = orig.map.wrapS;
+      tex.wrapT = orig.map.wrapT;
+      if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
+      if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
+      if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
+      if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
+      tex.needsUpdate = true;
+    }
+
+    m.map = tex;
+    if (m.color) m.color.set(0xffffff);
+    m.needsUpdate = true;
   });
+
   saveAssignToStorage();
   debounceMaybeCapture();
 }
-
-// モデル読み込み後に呼び出したいので、loadModel 成功時に実行する
-
-
-
-
-  
 /* ====== スクショ履歴 ====== */
 const MAX_SHOTS = 6;
 const shotsBox = $('shots');
@@ -1668,14 +893,14 @@ let lastOpWasNone = false;
 function currentSignature(){
   return targetMats.map(m=>{
     const k = assign[m.uuid];
-    return (k && state[k] && (state[k].preset || state[k].tex)) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
+    return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
   }).join('|');
 }
 function allFabricCovered(){
   if (targetMats.length === 0) return false;
   return targetMats.every(m=>{
     const k = assign[m.uuid];
-    return !!(k && k !== '—' && state[k] && (state[k].preset || state[k].tex));
+    return !!(k && k !== '—' && state[k] && state[k].tex);
   });
 }
 function debounceMaybeCapture(){
@@ -2119,7 +1344,7 @@ function loop(){
 } loop();
 
 /* メッセージ */
-let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+var t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
 
 /* 表示リセット */
 $('resetAll').addEventListener('click', ()=>{
@@ -2168,6 +1393,19 @@ loadModel(GLB_PATH);
 
   });
 })();
+// ===== URLに pattern/fabrics が付いてる時は、型選択をスキップして自動で3Dへ =====
+(function autoStartFromUrl(){
+  const has = params.has('pattern') || params.has('fabrics');
+  if(!has) return;
+  const def = PATTERNS[currentPatternId];
+  if(!def || !def.glb) return;
+
+  // selecting を外して3D表示へ
+  document.body.classList.remove('selecting');
+  GLB_PATH = def.glb;
+  loadModel(GLB_PATH);
+})();
+
 // GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
   const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
@@ -2199,22 +1437,5 @@ document.getElementById('backHomeBtn').addEventListener('click', function () {
 });
 
   
-
-// URLにpatternがある場合は型選択をスキップして自動で3Dへ
-(function autoStartFromUrl(){
-  try{
-    const p = new URLSearchParams(location.search);
-    const pat = (p.get('pattern') || '').trim();
-    if(!pat) return;
-    if(!PATTERNS[pat]) return;
-
-    currentPatternId = pat;
-    GLB_PATH = PATTERNS[pat].glb;
-    document.body.classList.remove('selecting');
-    loadModel(GLB_PATH);
-  }catch(e){
-    console.warn('[autoStartFromUrl] failed', e);
-  }
-})();
 </script>
 </body></html>
