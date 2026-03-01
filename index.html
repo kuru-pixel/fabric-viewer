@@ -191,7 +191,7 @@ body.selecting #patternSelect{
   
 </style>
 </head>
-<body class="selecting">
+<body>
 
 <!-- 型選択レイヤー -->
 <div id="patternSelect">
@@ -272,38 +272,40 @@ body.selecting #patternSelect{
 <canvas id="c"></canvas>
 
 
-<script src="/fabric-viewer/assets/threejs/three.min.js"></script>
-<script src="/fabric-viewer/assets/threejs/GLTFLoader.js"></script>
-<script src="/fabric-viewer/assets/threejs/OrbitControls.js"></script>
+<script src="./assets/threejs/three.min.js"></script>
+<script src="./assets/threejs/GLTFLoader.js"></script>
+<script src="./assets/threejs/OrbitControls.js"></script>
 <script>
 /* ========= 基本 ========= */
-console.log('[FV] script loaded', location.href);
-
 let GLB_PATH = null;
 const $ = (id)=>document.getElementById(id);
 
 // ===== URLパラメータ（生地IDと型ID） =====
 const params = new URLSearchParams(window.location.search);
 const fabricsParam = params.get('fabrics') || '';        // 例: "S-100,S-101,S-102"
-const patternParam = params.get('pattern') || '';    // 無ければ RI-3
+const patternParam = params.get('pattern') || 'RI-3';    // 無ければ RI-3
 
 // いま表示している型（RI-1, RI-2, RI-3, RI-4 など）
-let currentPatternId = patternParam || 'RI-3';
+let currentPatternId = patternParam;
+
+// URLにpattern/fabricsが付いてるときは自動で3Dを起動する（型選択画面をスキップ）
+const __HAS_AUTO_PARAMS__ = params.has('pattern') || params.has('fabrics');
+
 
 // ID → 画像パスを自動で組み立てる
 const FABRIC_EXT = '.jpg';
 function fabricIdToUrl(id) {
-  return `/fabric-viewer/assets/fabrics/${id}${FABRIC_EXT}`;
+  return `./assets/fabrics/${id}${FABRIC_EXT}`;
 }
 
 // 型ごとの定義
 const PATTERNS = {
-  'RI-1': { glb: '/fabric-viewer/assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-2': { glb: '/fabric-viewer/assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-3': { glb: '/fabric-viewer/assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-4': { glb: '/fabric-viewer/assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
-  'RI-5': { glb: '/fabric-viewer/assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
-  'RISC-Setup': { glb: '/fabric-viewer/assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-1': { glb: './assets/ri-1.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-2': { glb: './assets/ri-2.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
+  'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
 };
 
 function getSlots(){
@@ -386,9 +388,6 @@ function loadModel(path){
       analyze(model);
       fit(model);
       msg('garment.glb を読み込みました');
-      // URLのfabrics指定があればA/B/Cへ適用（プリセットGLBもロード）
-      try{ initFromBase(); }catch(e){ console.warn('[initFromBase] failed', e); }
-
       loadAssignFromStorage();
       applyAssignments();
       // ★プリセットボタンを初期化
@@ -598,7 +597,7 @@ function loadTexByFabricId(key, id){
   const urls = [];
   for(const s of stems){
     for(const ext of exts){
-      urls.push(`/fabric-viewer/assets/fabrics/${s}.${ext}`);
+      urls.push(`./assets/fabrics/${s}.${ext}`);
     }
   }
 
@@ -620,12 +619,13 @@ function loadTexByFabricId(key, id){
 
 function normalizeFabricId(id){
   id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, ""); // "_1" "_2" を剥がす
+  // S-200_1 みたいな枝番を落とす
+  id = id.replace(/_([0-9]+)$/i, "");
   return id.toUpperCase();
 }
 
 function loadPresetByFabricId(slot, id){
-  if(!state[slot]) return;
+  if(!state || !state[slot]) return;
 
   const norm = normalizeFabricId(id);
   state[slot].preset = null;
@@ -633,23 +633,23 @@ function loadPresetByFabricId(slot, id){
 
   loadFabricPresetById(norm).then(preset=>{
     state[slot].preset = preset;
+    console.log("[FAB_PRESET OK]", slot, norm, preset);
     applyAssignments();
-    console.log("[FAB_PRESET OK]", slot, norm);
   }).catch(err=>{
     console.warn("[FAB_PRESET NG]", slot, norm, err);
     state[slot].preset = null;
-    applyAssignments();
+    applyAssignments(); // フォールバック（JPG/元素材）
   });
 }
 
 
 
-// ===== URLから渡された生地を A/B/C に自動セット =====
-// 初期stateだけ準備（pattern選択後に rebuildState() し直す）
-rebuildState();
 
-function initFromBase(){
-if (!initialFabrics.length) return;
+
+// ===== URLから渡された生地を A/B/C に自動セット =====
+rebuildState();
+(function initFromBase(){
+  if (!initialFabrics.length) return;
 
   const slotOrder = getSlots();
   console.log('BASEから渡ってきた生地ID:', initialFabrics);
@@ -662,38 +662,7 @@ if (!initialFabrics.length) return;
     loadTexByFabricId(slot, id);
     loadPresetByFabricId(slot, id);
   });
-
-function startPattern(id, opts){
-  opts = opts || {};
-  id = String(id || '').trim();
-  if(!id) return;
-  const def = PATTERNS[id];
-  if(!def){ msg(`${id} は準備中です`); return; }
-
-  currentPatternId = id;
-  GLB_PATH = def.glb;
-
-  // URLを書き換え（任意）
-  if(!opts.skipUrlUpdate){
-    try{
-      const p = new URLSearchParams(location.search);
-      p.set('pattern', id);
-      history.replaceState(null, '', location.pathname + '?' + p.toString());
-    }catch(e){}
-  }
-
-  // 型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
-  const keepIds = { ...slotFabricIds };
-  rebuildState();
-  const nextIds = {};
-  getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; });
-  slotFabricIds = nextIds;
-
-  document.body.classList.remove('selecting');
-  loadModel(GLB_PATH);
-}
-
-}
+})();
 
 const assign = {}; // material.uuid -> 'A'|'B'|'C'|'—'
 const LS_KEYS = { assign:'fv_assign_v1', ui:'uiCollapsed' };
@@ -718,7 +687,7 @@ function prepTexture(t){
   t.anisotropy=renderer.capabilities.getMaxAnisotropy();
 }
 
-const FAB_PRESET_DIR = '/fabric-viewer/assets/fabric-presets/';
+const FAB_PRESET_DIR = './assets/fabric-presets/';
 const _fabricPresetCache = new Map(); // id -> Promise(preset)
 
 function _computeUvRepeatFromMesh(mesh){
@@ -784,29 +753,19 @@ function loadFabricPresetById(fabricId){
 
 function _cloneTexWithRepeat(srcTex, uvRepeat){
   if(!srcTex) return null;
-  // glTFのTextureがまだ画像を持っていない場合は無理に更新しない
-  if(!srcTex.image){
-    console.warn('[FAB_PRESET] texture has no image yet:', srcTex);
-    return null;
-  }
 
   const t = srcTex.clone();
+  t.image = srcTex.image; // 参照維持
 
-  // 参照・互換維持（three r146想定）
-  t.image = srcTex.image;
-  t.flipY = srcTex.flipY;
-
-  // 色空間（BaseColorだけSRGBが必要）
-  if(t.colorSpace !== undefined) t.colorSpace = srcTex.colorSpace;
-
+  // wrapはRepeat前提（タイルさせる）
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
 
-  const baseRx = (t.repeat && typeof t.repeat.x === 'number') ? t.repeat.x : 1;
-  const baseRy = (t.repeat && typeof t.repeat.y === 'number') ? t.repeat.y : 1;
+  // 既にKHR_texture_transform等でrepeatが入ってる場合は“掛け算”
+  const baseRx = (t.repeat?.x ?? 1);
+  const baseRy = (t.repeat?.y ?? 1);
   if(t.repeat) t.repeat.set(baseRx * uvRepeat.x, baseRy * uvRepeat.y);
 
-  // wrap変更は再アップロードが必要
   t.needsUpdate = true;
   return t;
 }
@@ -818,13 +777,8 @@ function applyPresetToMaterial(dstMat, preset){
   // 色で潰れるのを避ける（ベースカラーを白）
   if(dstMat.color) dstMat.color.set(0xffffff);
 
-  // ★布なので金属っぽさを消す（真っ黒化しやすいのを防ぐ）
-  if(typeof dstMat.metalness === 'number') dstMat.metalness = 0;
-  if(typeof dstMat.roughness === 'number') dstMat.roughness = 1;
-
   // map類（存在するものだけ）
   dstMat.map = _cloneTexWithRepeat(src.map, preset.uvRepeat);
-  if(dstMat.map && dstMat.map.colorSpace !== undefined) dstMat.map.colorSpace = THREE.SRGBColorSpace;
   dstMat.normalMap = _cloneTexWithRepeat(src.normalMap, preset.uvRepeat);
   dstMat.roughnessMap = _cloneTexWithRepeat(src.roughnessMap, preset.uvRepeat);
   dstMat.metalnessMap = _cloneTexWithRepeat(src.metalnessMap, preset.uvRepeat);
@@ -832,7 +786,9 @@ function applyPresetToMaterial(dstMat, preset){
   dstMat.alphaMap = _cloneTexWithRepeat(src.alphaMap, preset.uvRepeat);
   dstMat.emissiveMap = _cloneTexWithRepeat(src.emissiveMap, preset.uvRepeat);
 
-  // 数値系：ここで上書きすると真っ黒になるケースがあるので一旦触らない（mapがあるならそれを優先）
+  // 数値系（あるならコピー）
+  if(typeof src.roughness === 'number') dstMat.roughness = src.roughness;
+  if(typeof src.metalness === 'number') dstMat.metalness = src.metalness;
 
   if(src.normalScale && dstMat.normalScale) dstMat.normalScale.copy(src.normalScale);
 
@@ -855,7 +811,7 @@ function applyAssignments(){
     const preset = st ? st.preset : null;
     const tex = st ? st.tex : null;
     if(isSupportedMat(m)){
-      if(key==='—' || (!preset && !tex)){
+      if((!tex && !preset) || key==='—'){
         const orig = origMatState.get(m.uuid);
         if(orig){
           m.map = orig.map;
@@ -876,10 +832,7 @@ function applyAssignments(){
           m.map = null;
           if(m.color) m.color.set(0xffffff);
         }
-            } else if(preset) {
-        // ★プリセットGLB（材質）を適用
-        applyPresetToMaterial(m, preset);
-      } else {
+            } else {
         // ★ texを貼るときも「質感系」は元に戻してから貼る（のっぺり対策）
         const orig = origMatState.get(m.uuid);
         if (orig) {
@@ -896,22 +849,29 @@ function applyAssignments(){
           m.opacity     = orig.opacity;
         }
 
-        // m.map = tex; の直前
-if (orig && orig.map && tex && tex.image) {
-  tex.wrapS = orig.map.wrapS;
-  tex.wrapT = orig.map.wrapT;
-  if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
-  if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
-  if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
-  if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
-  // repeat/offset変更だけならneedsUpdate不要。wrap変更で必要だが、画像が来てから自動でアップロードされるのでここでは触らない
-}
+        // 生地の適用（プリセットGLB優先）
+        if (preset) {
+          applyPresetToMaterial(m, preset);
+          // 黒化しやすいので布寄りに寄せる（プリセットに数値が無い場合の保険）
+          if (typeof m.metalness === 'number') m.metalness = 0.0;
+          if (typeof m.roughness === 'number') m.roughness = 1.0;
+        } else {
+          // m.map = tex; の直前（元の貼り方をできるだけ維持）
+          if (orig && orig.map && tex) {
+            tex.wrapS = orig.map.wrapS;
+            tex.wrapT = orig.map.wrapT;
+            if (tex.repeat && orig.map.repeat) tex.repeat.copy(orig.map.repeat);
+            if (tex.offset && orig.map.offset) tex.offset.copy(orig.map.offset);
+            if (typeof orig.map.rotation === "number") tex.rotation = orig.map.rotation;
+            if (tex.center && orig.map.center) tex.center.copy(orig.map.center);
+            tex.needsUpdate = true;
+          }
 
+          m.map = tex;
 
-        m.map = tex;
-
-        // ★色潰れ対策：ベースカラーは白に戻す（RI-2で効いたやつを“汎用化”）
-        if (m.color) m.color.set(0xffffff);
+          // ★色潰れ対策：ベースカラーは白に戻す
+          if (m.color) m.color.set(0xffffff);
+        }
       }
 
       m.needsUpdate = true;
@@ -1391,7 +1351,32 @@ function loop(){
 } loop();
 
 /* メッセージ */
-let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout(()=>el.hidden=true,2500); }
+let t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; clearTimeout(t); t=setTimeout
+// ===== 自動起動：URLにpattern/fabricsが付いてるなら型選択をスキップして3Dへ =====
+window.addEventListener('DOMContentLoaded', () => {
+  try{
+    if(__HAS_AUTO_PARAMS__){
+      const def = PATTERNS[currentPatternId];
+      if(def && def.glb){
+        GLB_PATH = def.glb;
+        rebuildState();
+        initFromBase(); // JPG/プリセットGLBのロード開始
+        document.body.classList.remove('selecting');
+        loadModel(GLB_PATH);
+        console.log('[FV] autostart', currentPatternId, fabricsParam);
+        return;
+      }
+    }
+    // 自動起動しないなら型選択を表示
+    document.body.classList.add('selecting');
+    console.log('[FV] selecting (no params)');
+  }catch(e){
+    console.error('[FV] autostart error', e);
+    document.body.classList.add('selecting');
+  }
+});
+
+(()=>el.hidden=true,2500); }
 
 /* 表示リセット */
 $('resetAll').addEventListener('click', ()=>{
@@ -1418,16 +1403,28 @@ $('resetAll').addEventListener('click', ()=>{
 
   grid.addEventListener('click', (e)=>{
     const card = e.target.closest('.patternCard'); if(!card) return;
-    const id = card.dataset.id;
-    console.log('[FV] pattern clicked', id);
-    startPattern(id);
-});
-})();
-// URLにpatternが指定されている場合は自動で3Dへ
-if (patternParam && PATTERNS[patternParam]) {
-  startPattern(patternParam, { skipUrlUpdate: true });
-}
+    const id = card.dataset.id;       // "RI-3" とか
+    const def = PATTERNS[id];
+    if (!def){ msg(`${id} は準備中です`); return; }
 
+    GLB_PATH = def.glb;
+    currentPatternId = id;
+
+    // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+// ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
+const keepIds = { ...slotFabricIds };  // ← 先に退避（重要）
+
+rebuildState();
+
+const nextIds = {};
+getSlots().forEach((k) => { nextIds[k] = keepIds[k] ?? null; }); // ← keepIds から復元
+slotFabricIds = nextIds;
+
+document.body.classList.remove('selecting');
+loadModel(GLB_PATH);
+
+  });
+})();
 // GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
   const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
