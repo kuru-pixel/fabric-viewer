@@ -352,10 +352,6 @@ dir.shadow.mapSize.set(1024,1024); dir.shadow.camera.near=0.1; dir.shadow.camera
 const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-3,2.5,-2); scene.add(fill);
 const rim  = new THREE.DirectionalLight(0xffffff, 0.35); rim.position.set(0,3,-4); scene.add(rim);
 
-  //テスト！！
-const PRESET_BASE_REPEAT = 201;   // プリセットGLB側の基準（今回の結果）
-const USER_TILE_MULT = 1;         // ここを 2,5… にすると枚数が増える
-
 controls.enablePan = false; if ('zoomToCursor' in controls) controls.zoomToCursor = false;
 
 /* モデル */
@@ -772,19 +768,16 @@ function _cloneTexWithRepeat(srcTex, uvRepeat){
   if(!srcTex) return null;
 
   const t = srcTex.clone();
-  t.image = srcTex.image;
+  t.image = srcTex.image; // 参照維持
 
+  // wrapはRepeat前提（タイルさせる）
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
 
-  // ★追加：プリセットのuvRepeat(=201)を「基準で割って」からユーザー倍率を掛ける
-  const rx = (uvRepeat?.x ?? 1) / PRESET_BASE_REPEAT * USER_TILE_MULT;
-  const ry = (uvRepeat?.y ?? 1) / PRESET_BASE_REPEAT * USER_TILE_MULT;
-
-  // 既存repeatがあるならそれに掛け算
+  // 既にKHR_texture_transform等でrepeatが入ってる場合は“掛け算”
   const baseRx = (t.repeat?.x ?? 1);
   const baseRy = (t.repeat?.y ?? 1);
-  if(t.repeat) t.repeat.set(baseRx * rx, baseRy * ry);
+  if(t.repeat) t.repeat.set(baseRx * uvRepeat.x, baseRy * uvRepeat.y);
 
   t.needsUpdate = true;
   return t;
