@@ -1421,7 +1421,7 @@ loadModel(GLB_PATH);
 
   });
 })();
-// ===== URLに pattern/fabrics が付いてる時は、型選択をスキップして自動で3Dへ =====
+// ===== URLに pattern が付いてる時だけ、型選択をスキップして自動で3Dへ =====
 (function autoStartFromUrl(){
   const has = params.has('pattern'); // fabrics だけでは自動遷移しない
   if(!has) return;
