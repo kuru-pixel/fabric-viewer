@@ -869,7 +869,7 @@ function allFabricCovered(){
 }
 function debounceMaybeCapture(){
   clearTimeout(shotDebounce);
-  shotDebounce = setTimeout(()=>{
+  shotDebounce = setTimeoutwindow.addEventListener('DOMContentLoaded', ()=>{
     if (lastOpWasNone){ lastOpWasNone=false; return; }
     if (!allFabricCovered()) return;
     const sig = currentSignature();
@@ -1329,6 +1329,8 @@ $('resetAll').addEventListener('click', ()=>{
   }
 
   const grid = $('patternGrid');
+  if (grid && grid.__fv_bound) return;
+  if (grid) grid.__fv_bound = true;
   if (!grid) return;
 
   grid.addEventListener('click', (e)=>{
@@ -1354,8 +1356,7 @@ document.body.classList.remove('selecting');
 loadModel(GLB_PATH);
 
   });
-})();
-// GLBから2Dサムネを生成（フォールバック）
+});// GLBから2Dサムネを生成（フォールバック）
 function makeThumbFromGLB(glbPath, targetEl){
   const r = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
   const W=360, H=270; r.setSize(W,H,false); r.outputColorSpace = THREE.SRGBColorSpace;
