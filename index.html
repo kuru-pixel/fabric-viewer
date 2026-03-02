@@ -189,24 +189,6 @@ body.selecting #patternSelect{
 }
 
   
-
-/* ===== Fabric preset picker modal ===== */
-.fabModal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter: blur(4px);}
-.fabModal.hidden{display:none;}
-.fabModalPanel{width:min(980px,92vw);height:min(720px,86vh);background:#111a;border:1px solid rgba(255,255,255,.18);border-radius:18px;box-shadow:0 14px 50px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;}
-.fabModalHeader{display:flex;gap:10px;align-items:center;padding:12px 14px;background:rgba(20,20,22,.75);color:#fff;border-bottom:1px solid rgba(255,255,255,.14);}
-#fabModalTitle{font-weight:700;}
-#fabSearch{flex:1;min-width:160px;background:#0008;color:#fff;border:1px solid #ffffff22;border-radius:10px;padding:8px 10px;outline:none;}
-#fabClose{background:#0008;color:#fff;border:1px solid #ffffff22;border-radius:10px;padding:6px 10px;cursor:pointer;}
-.fabGrid{padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;overflow:auto;background:rgba(10,10,12,.40);}
-.fabCard{background:#ffffff10;border:1px solid #ffffff18;border-radius:14px;padding:10px;cursor:pointer;color:#fff;text-align:left;display:flex;flex-direction:column;gap:8px;}
-.fabCard:hover{background:#ffffff18;}
-.fabThumb{width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#bdbdbd;}
-.fabThumb img{width:100%;height:100%;object-fit:cover;display:block;}
-.fabLabel{font-size:13px;font-weight:650;opacity:.95;word-break:break-all;}
-.fabMeta{font-size:12px;opacity:.75;}
-.fabModalFooter{padding:10px 14px;background:rgba(20,20,22,.75);color:#fff;border-top:1px solid rgba(255,255,255,.14);font-size:12px;}
-
 </style>
 </head>
 <body class="selecting">
@@ -636,7 +618,13 @@ function loadTexByFabricId(key, id){
 
 function normalizeFabricId(id){
   id = String(id || "").trim();
-  id = id.replace(/_([0-9]+)$/i, ""); // "_1" "_2" を剥がす
+  // URL/パスが来てもOK（最後の要素だけ使う）
+  try{ id = id.split('?')[0].split('#')[0]; }catch(e){}
+  if(id.includes('/')) id = id.split('/').pop();
+  // 拡張子を剥がす（jpg/png/webp/glb等が来てもIDに揃える）
+  id = id.replace(/\.(glb|gltf|jpg|jpeg|png|webp)$/i, "");
+  // 末尾の _数字 を剥がす（S-100_1 → S-100）
+  id = id.replace(/_([0-9]+)$/i, "");
   return id.toUpperCase();
 }
 
@@ -692,7 +680,7 @@ rebuildState();
 
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
     loadPresetByFabricId(slot, id);
-    // loadTexByFabricId(slot, id); // JPGフォールバック（必要なら）
+    // // loadTexByFabricId(slot, id); // JPGはサムネ用。presetGLB運用では不要なので停止 // JPGフォールバック（必要なら）
   });
 })();
 
@@ -1018,181 +1006,6 @@ const currentList = order.map(s => slotFabricIds[s] || EMPTY);
 
   // 生地選択ページへ移動
   location.href = `${FABRIC_SELECT_URL}?${params.toString()}#custom-order`;
-
-// ===== Fabric preset picker（GLB大量でも手書き不要） =====
-const PRESET_IDS_JSON = './assets/fabric-presets/index.json'; // あれば最優先（任意）
-const GH_OWNER = 'kuru-pixel';
-const GH_REPO  = 'fabric-viewer';
-const GH_BRANCH = 'main';
-// リポジトリ内のパス（このrepoは fabric-viewer/ 配下に実体がある）
-const GH_PRESET_PATH = 'fabric-viewer/assets/fabric-presets';
-
-let _presetIdsCache = null;
-let _activeSlotForPicker = null;
-
-async function fetchPresetIds(){
-  if(_presetIdsCache) return _presetIdsCache;
-
-  // 1) 任意のindex.json（キャッシュ/レート制限回避に有効）
-  try{
-    const r = await fetch(PRESET_IDS_JSON, { cache:'no-store' });
-    if(r.ok){
-      const j = await r.json();
-      if(Array.isArray(j.ids)){
-        _presetIdsCache = j.ids.map(x=>String(x).trim()).filter(Boolean);
-        return _presetIdsCache;
-      }
-    }
-  }catch(e){}
-
-  // 2) GitHub Contents APIで自動列挙（手書き不要）
-  try{
-    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PRESET_PATH}?ref=${GH_BRANCH}`;
-    const r = await fetch(url, { cache:'no-store' });
-    if(!r.ok) throw new Error(`GitHub API HTTP ${r.status}`);
-    const arr = await r.json();
-    const ids = (arr||[])
-      .filter(x=>x && x.type==='file' && typeof x.name==='string' && x.name.toLowerCase().endsWith('.glb'))
-      .map(x=>x.name.replace(/\.glb$/i,''))
-      .sort((a,b)=>a.localeCompare(b,'en'));
-    _presetIdsCache = ids;
-    return ids;
-  }catch(e){
-    console.warn('[fetchPresetIds] failed', e);
-    _presetIdsCache = [];
-    return _presetIdsCache;
-  }
-}
-
-function openFabricPicker(slot){
-  _activeSlotForPicker = slot;
-  const modal = $('fabModal');
-  const title = $('fabModalTitle');
-  const status = $('fabStatus');
-  const grid = $('fabGrid');
-  const search = $('fabSearch');
-
-  if(title) title.textContent = `生地を選択（${slot}）`;
-  if(status) status.textContent = '読み込み中…';
-  if(grid) grid.innerHTML = '';
-  if(search) search.value = '';
-
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden','false');
-
-  // 一覧取得→描画
-  fetchPresetIds().then(ids=>{
-    if(status) status.textContent = `全${ids.length}件（サムネが無いものも選択可能）`;
-    renderPresetGrid(ids, '');
-    // 入力でフィルタ
-    if(search){
-      search.oninput = ()=>{
-        renderPresetGrid(ids, search.value || '');
-      };
-      search.focus();
-    }
-  });
-}
-
-function closeFabricPicker(){
-  const modal = $('fabModal');
-  modal.classList.add('hidden');
-  modal.setAttribute('aria-hidden','true');
-  _activeSlotForPicker = null;
-}
-
-function renderPresetGrid(ids, q){
-  const grid = $('fabGrid');
-  if(!grid) return;
-  grid.innerHTML = '';
-
-  const query = String(q||'').trim().toLowerCase();
-  const list = query
-    ? ids.filter(id=>id.toLowerCase().includes(query))
-    : ids;
-
-  const status = $('fabStatus');
-  if(status){
-    status.textContent = query ? `表示 ${list.length}/${ids.length}件` : `全${ids.length}件（サムネが無いものも選択可能）`;
-  }
-
-  list.forEach(id=>{
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'fabCard';
-    card.dataset.id = id;
-
-    const thumb = document.createElement('div');
-    thumb.className = 'fabThumb';
-
-    const img = new Image();
-    img.alt = id;
-    img.src = `./assets/fabrics/${id}.jpg`;
-    img.onload = ()=>{
-      thumb.innerHTML = '';
-      thumb.appendChild(img);
-    };
-    img.onerror = ()=>{
-      // サムネが無い場合：グレーのまま（選択は可能）
-      thumb.innerHTML = '';
-      const ph = document.createElement('div');
-      ph.style.width='100%';
-      ph.style.height='100%';
-      ph.style.background='#bdbdbd';
-      thumb.appendChild(ph);
-    };
-
-    const label = document.createElement('div');
-    label.className = 'fabLabel';
-    label.textContent = id;
-
-    const meta = document.createElement('div');
-    meta.className = 'fabMeta';
-    meta.textContent = 'preset: .glb';
-
-    card.appendChild(thumb);
-    card.appendChild(label);
-    card.appendChild(meta);
-
-    card.addEventListener('click', ()=>{
-      const slot = _activeSlotForPicker;
-      if(!slot) return;
-
-      // 選択反映：slotFabricIds 更新 → presetロード → apply
-      if(!slotFabricIds) slotFabricIds = {};
-      slotFabricIds[slot] = id;
-
-      // 既存のプリセットロードを使用
-      loadPresetByFabricId(slot, id);
-      closeFabricPicker();
-      msg(`生地${slot}: ${id}`);
-    });
-
-    grid.appendChild(card);
-  });
-}
-
-// モーダル閉じる（×/外側クリック/ESC）
-(function bindFabricPickerUI(){
-  const modal = $('fabModal');
-  const closeBtn = $('fabClose');
-  if(closeBtn) closeBtn.addEventListener('click', closeFabricPicker);
-
-  if(modal){
-    modal.addEventListener('click', (e)=>{
-      if(e.target === modal) closeFabricPicker();
-    });
-  }
-
-  window.addEventListener('keydown', (e)=>{
-    if(e.key === 'Escape'){
-      const m = $('fabModal');
-      if(m && !m.classList.contains('hidden')) closeFabricPicker();
-    }
-  });
-})();
-
-
 }
 
   
@@ -1212,9 +1025,9 @@ function clearTexture(key){
 
 getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
 
-$('changeA').addEventListener('click', ()=> openFabricPicker('A'));
-$('changeB').addEventListener('click', ()=> openFabricPicker('B'));
-$('changeC').addEventListener('click', ()=> openFabricPicker('C'));
+$('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
+$('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
+$('changeC').addEventListener('click', ()=> goToFabricSelect('C'));
 
 /* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
 const ray = new THREE.Raycaster();
@@ -1655,20 +1468,4 @@ document.getElementById('backHomeBtn').addEventListener('click', function () {
 
   
 </script>
-
-<!-- ===== Fabric preset picker modal ===== -->
-<div id="fabModal" class="fabModal hidden" aria-hidden="true">
-  <div class="fabModalPanel" role="dialog" aria-modal="true">
-    <div class="fabModalHeader">
-      <div id="fabModalTitle">生地を選択</div>
-      <input id="fabSearch" type="text" placeholder="例: S-200 / green / denim" />
-      <button id="fabClose" type="button">閉じる</button>
-    </div>
-    <div id="fabGrid" class="fabGrid"></div>
-    <div class="fabModalFooter">
-      <span id="fabStatus">読み込み中…</span>
-    </div>
-  </div>
-</div>
-
 </body></html>
