@@ -189,6 +189,61 @@ body.selecting #patternSelect{
 }
 
   
+
+  /* ===== 生地選択モーダル（viewer内） ===== */
+  #fabricPicker.fp{position:fixed; inset:0; z-index:30; display:none;}
+  #fabricPicker.fp[aria-hidden="false"]{display:block;}
+  #fabricPicker .fp-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.35);}
+  #fabricPicker .fp-panel{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(1100px, 94vw); height:min(760px, 88vh);
+    background:rgba(255,255,255,.92); border:1px solid rgba(0,0,0,.08);
+    border-radius:16px; box-shadow:0 16px 50px rgba(0,0,0,.25);
+    backdrop-filter: blur(10px) saturate(120%);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  #fabricPicker .fp-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #0001;}
+  #fabricPicker .fp-title{font-weight:700; color:#222;}
+  #fabricPicker .fp-close{border:none; background:#0000; font-size:22px; cursor:pointer; padding:6px 10px; borde
+<!-- ===== 生地選択モーダル（viewer内） ===== -->
+<div id="fabricPicker" class="fp" aria-hidden="true">
+  <div class="fp-backdrop" data-close="1"></div>
+  <div class="fp-panel" role="dialog" aria-modal="true">
+    <div class="fp-head">
+      <div class="fp-title">生地を選択（<span id="fpSlot">A</span>）</div>
+      <button id="fpClose" class="fp-close" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div class="fp-tools">
+      <input id="fpSearch" type="search" placeholder="検索（例: S-200）" />
+      <button id="fpReload" type="button">更新</button>
+    </div>
+    <div id="fpGrid"></div>
+    <div class="fp-note" id="fpNote">※ 生地プリセットGLB（assets/fabric-presets）に存在するIDだけ表示します。サムネ（assets/fabrics/ID.jpg）が無いものはグレー表示で選べません。</div>
+  </div>
+</div>
+
+r-radius:10px;}
+  #fabricPicker .fp-close:hover{background:#0000000d;}
+  #fabricPicker .fp-tools{display:flex; gap:10px; padding:10px 14px; border-bottom:1px solid #0001;}
+  #fabricPicker #fpSearch{flex:1; padding:10px 12px; border-radius:12px; border:1px solid #0002; font-size:14px;}
+  #fabricPicker #fpReload{padding:10px 12px; border-radius:12px; border:1px solid #0002; background:#fff; cursor:pointer;}
+  #fabricPicker #fpReload:hover{background:#f6f7fa;}
+  #fabricPicker #fpGrid{padding:14px; overflow:auto; display:grid; gap:12px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    align-content:start;
+  }
+  .fp-card{position:relative; border:1px solid #0002; background:#fff; border-radius:14px; overflow:hidden; cursor:pointer;
+    box-shadow:0 6px 16px rgba(0,0,0,.08); transition:transform .06s ease, box-shadow .15s ease, opacity .15s ease;}
+  .fp-card:hover{transform:translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.12);}
+  .fp-card.disabled{opacity:.45; cursor:not-allowed;}
+  .fp-card.disabled:hover{transform:none; box-shadow:0 6px 16px rgba(0,0,0,.08);}
+  .fp-thumb{width:100%; aspect-ratio:1/1; background:#e4e7ee center/cover no-repeat;}
+  .fp-thumb.ph{background:#cfd5df;}
+  .fp-label{padding:8px 10px; font-size:12px; font-weight:650; color:#222; background:#fff;}
+  .fp-badge{position:absolute; left:10px; top:10px; padding:4px 6px; font-size:11px; border-radius:8px;
+    background:rgba(0,0,0,.72); color:#fff;}
+  #fabricPicker .fp-note{padding:10px 14px; font-size:12px; color:#333a; border-top:1px solid #0001;}
+
 </style>
 </head>
 <body class="selecting">
@@ -514,7 +569,8 @@ function rebuildState(){
 
 let thumbsGenerated = false;
 function hasAllTextures(){
-  return !!(state.A.tex && state.B.tex && state.C.tex);
+  const slots = getSlots();
+  return slots.every(k=> !!(state?.[k]?.tex || state?.[k]?.preset));
 }
 
 
@@ -673,6 +729,7 @@ rebuildState();
     if (!slot) return;
 
     slotFabricIds[slot] = id;          // どのスロットに何のIDが入ったか覚える
+    if(state[slot]){ state[slot].url = fabricIdToUrl(id); }
     loadPresetByFabricId(slot, id);
     // loadTexByFabricId(slot, id); // JPGフォールバック（必要なら）
   });
@@ -912,14 +969,14 @@ let lastOpWasNone = false;
 function currentSignature(){
   return targetMats.map(m=>{
     const k = assign[m.uuid];
-    return (k && state[k] && state[k].tex) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
+    return (k && state[k] && (state[k].tex || state[k].preset)) ? `${m.uuid}:${k}` : `${m.uuid}:-`;
   }).join('|');
 }
 function allFabricCovered(){
   if (targetMats.length === 0) return false;
   return targetMats.every(m=>{
     const k = assign[m.uuid];
-    return !!(k && k !== '—' && state[k] && state[k].tex);
+    return !!(k && k !== '—' && state[k] && (state[k].tex || state[k].preset));
   });
 }
 function debounceMaybeCapture(){
@@ -974,7 +1031,211 @@ function loadTexFor(key, file){
 }
 
 // 生地選択ページの URL（★ あなたの CUSTOM ORDER のURLに変える）
-const FABRIC_SELECT_URL = 'https://riistilo.base.shop/blog';
+const 
+// ===== 生地選択（サムネ：assets/fabrics / 実体：assets/fabric-presets/*.glb） =====
+const FP = { root:null, grid:null, search:null, close:null, reload:null, slot:null, note:null };
+let fpActiveSlot = 'A';
+let fpAllIds = [];
+
+// 可能ならローカルの index.json（手動更新 or 自動生成）を使い、無ければGitHub APIで自動列挙
+async function fetchPresetIds(force=false){
+  const cacheKey = 'fv_preset_ids_v1';
+  if(!force){
+    try{
+      const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+      if(cached && Array.isArray(cached.ids) && (Date.now() - cached.t) < 6*60*60*1000){
+        return cached.ids;
+      }
+    }catch(e){}
+  }
+
+  // 1) ローカル index.json（任意）
+  try{
+    const res = await fetch(`${FAB_PRESET_DIR}index.json`, { cache: 'no-store' });
+    if(res.ok){
+      const j = await res.json();
+      const ids = Array.isArray(j) ? j : (Array.isArray(j.ids) ? j.ids : null);
+      if(ids && ids.length){
+        const out = ids.map(x=>String(x||'').trim()).filter(Boolean);
+        sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), ids: out }));
+        return out;
+      }
+    }
+  }catch(e){}
+
+  // 2) GitHub API（手書き不要）
+  try{
+    const apiUrl = 'https://api.github.com/repos/kuru-pixel/fabric-viewer/contents/fabric-viewer/assets/fabric-presets?ref=main';
+    const res = await fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } });
+    if(res.ok){
+      const arr = await res.json();
+      const ids = (arr||[])
+        .filter(x => x && x.type === 'file' && /\.glb$/i.test(x.name||''))
+        .map(x => String(x.name).replace(/\.glb$/i, ''))
+        .sort((a,b)=>a.localeCompare(b, 'en'));
+      sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), ids }));
+      return ids;
+    }
+  }catch(e){}
+
+  sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), ids: [] }));
+  return [];
+}
+
+function hideFabricPicker(){
+  if(!FP.root) return;
+  FP.root.setAttribute('aria-hidden','true');
+}
+
+function selectFabricForSlot(slot, id){
+  id = String(id||'').trim().toUpperCase();
+  if(!id) return;
+
+  slotFabricIds[slot] = id;
+  if(state?.[slot]){
+    state[slot].url = fabricIdToUrl(id); // サムネURL（吹き出し＆UI用）
+  }
+
+  loadPresetByFabricId(slot, id);
+
+  // URL更新（次回リロードで復元できる）
+  try{
+    const p = new URLSearchParams(location.search);
+    p.set('pattern', currentPatternId);
+    const order = getSlots();
+    p.set('fabrics', order.map(s => slotFabricIds[s] || '-').join(','));
+    history.replaceState(null, '', location.pathname + '?' + p.toString());
+  }catch(e){}
+
+  // UIのサムネ更新（存在していれば）
+  try{ updateBubblePreviews(); }catch(e){}
+
+  // 下部プリセットサムネを作り直したい場合
+  try{ thumbsGenerated = false; generateAllPresetThumbs(); }catch(e){}
+}
+
+function renderFabricGrid(){
+  if(!FP.grid) return;
+
+  const q = String(FP.search?.value || '').trim().toUpperCase();
+  const ids = fpAllIds.filter(id => !q || String(id).toUpperCase().includes(q));
+
+  FP.grid.innerHTML = '';
+
+  if(!ids.length){
+    FP.note.textContent = '該当なし';
+    return;
+  }
+
+  FP.note.textContent = `表示: ${ids.length} 件`;
+
+  ids.forEach(id=>{
+    id = String(id || '').trim();
+    if(!id) return;
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'fp-card disabled';
+    card.disabled = true;
+
+    const thumb = document.createElement('div');
+    thumb.className = 'fp-thumb ph';
+
+    const label = document.createElement('div');
+    label.className = 'fp-label';
+    label.textContent = id;
+
+    const badge = document.createElement('div');
+    badge.className = 'fp-badge';
+    badge.textContent = fpActiveSlot;
+
+    card.appendChild(thumb);
+    card.appendChild(label);
+    card.appendChild(badge);
+
+    // サムネ（assets/fabrics/ID.jpg）が存在するものだけクリック可
+    const img = new Image();
+    img.onload = ()=>{
+      thumb.classList.remove('ph');
+      thumb.style.backgroundImage = `url(${fabricIdToUrl(id)})`;
+      card.classList.remove('disabled');
+      card.disabled = false;
+    };
+    img.onerror = () => {
+      // サムネが無くても選択できるようにする（グレー表示）
+      card.classList.add('co-no-thumb');
+      // 既にプレースホルダーが無ければ追加
+      if(!card.querySelector('.co-ph')){
+        const ph = document.createElement('div');
+        ph.className = 'co-ph';
+        // 画像の代わりに先頭へ
+        card.insertBefore(ph, card.firstChild);
+      }
+    };
+    img.src = fabricIdToUrl(id);
+
+    card.addEventListener('click', ()=>{
+      if(card.disabled) return;
+      selectFabricForSlot(fpActiveSlot, id);
+      hideFabricPicker();
+      msg(`生地${fpActiveSlot}に ${id} を選択しました`);
+    });
+
+    FP.grid.appendChild(card);
+  });
+}
+
+function openFabricPicker(slot){
+  fpActiveSlot = slot;
+  if(FP.slot) FP.slot.textContent = slot;
+
+  FP.root.setAttribute('aria-hidden','false');
+  FP.note.textContent = '読み込み中...';
+  if(FP.search) FP.search.value = '';
+
+  const go = (ids)=>{
+    fpAllIds = ids || [];
+    renderFabricGrid();
+  };
+
+  if(fpAllIds.length){
+    renderFabricGrid();
+    FP.note.textContent = `表示: ${fpAllIds.length} 件`;
+  }else{
+    fetchPresetIds(false).then(go).catch(()=>go([]));
+  }
+}
+
+(function initFabricPicker(){
+  FP.root  = $('fabricPicker');
+  if(!FP.root) return;
+
+  FP.grid  = $('fpGrid');
+  FP.search= $('fpSearch');
+  FP.close = $('fpClose');
+  FP.reload= $('fpReload');
+  FP.slot  = $('fpSlot');
+  FP.note  = $('fpNote');
+
+  FP.close?.addEventListener('click', hideFabricPicker);
+  FP.root.querySelector('.fp-backdrop')?.addEventListener('click', hideFabricPicker);
+
+  FP.search?.addEventListener('input', ()=>renderFabricGrid());
+  FP.reload?.addEventListener('click', ()=>{
+    fpAllIds = [];
+    FP.note.textContent = '更新中...';
+    fetchPresetIds(true).then(ids=>{
+      fpAllIds = ids || [];
+      renderFabricGrid();
+    }).catch(()=>{
+      fpAllIds = [];
+      renderFabricGrid();
+    });
+  });
+})();
+
+
+FABRIC_SELECT_URL = 'https://riistilo.base.shop/blog';
 
 function goToFabricSelect(slot){
   // A/B/C で何番目か
@@ -1019,9 +1280,9 @@ function clearTexture(key){
 
 getSlots().forEach(k=>{ $('clear'+k).addEventListener('click', ()=>clearTexture(k)); });
 
-$('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
-$('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
-$('changeC').addEventListener('click', ()=> goToFabricSelect('C'));
+$('changeA').addEventListener('click', ()=> openFabricPicker('A'));
+$('changeB').addEventListener('click', ()=> openFabricPicker('B'));
+$('changeC').addEventListener('click', ()=> openFabricPicker('C'));
 
 /* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
 const ray = new THREE.Raycaster();
