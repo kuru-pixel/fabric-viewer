@@ -1423,8 +1423,9 @@ loadModel(GLB_PATH);
 })();
 // ===== URLに pattern が付いてる時だけ、型選択をスキップして自動で3Dへ =====
 (function autoStartFromUrl(){
-  const has = params.has('pattern'); // fabrics だけでは自動遷移しない
-  console.log('[FV] autostart rule: pattern-only', {hasPattern: params.has('pattern'), hasFabrics: params.has('fabrics')});
+  try{ console.log('[AUTO_START] pattern-only mode', {hasPattern: params.has('pattern'), fabrics: params.get('fabrics')}); }catch(e){}
+
+  const has = params.has('pattern'); // fabrics だけでは自動遷移しない（型選択に留める）
   if(!has) return;
   const def = PATTERNS[currentPatternId];
   if(!def || !def.glb) return;
