@@ -1,6 +1,8 @@
-<!doctype html><html><head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<!DOCTYPE html>
+<!-- saved from url=(0049)file:///C:/Users/kobay/Downloads/Git_index_1.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fabric Viewer</title>
 <style>
   /* パネル開閉の矢印ボタンは使わないので非表示にする */
@@ -214,6 +216,12 @@ body.selecting #patternSelect{
   <div id="ui">
     <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
     <div class="btnRow">
+      <button id="backToPattern" title="型選択画面に戻る">← 型を選び直す</button>
+    </div>
+    <div class="btnRow">
+      <button id="changeAllFabrics" title="生地を3枚まとめて選び直す">生地を全部選び直す</button>
+    </div>
+    <div class="btnRow">
       <button id="resetAll" title="割当を全て『なし』・白に戻す">リセット</button>
     </div>
 
@@ -268,13 +276,13 @@ body.selecting #patternSelect{
 
 <div id="footer">ドラッグで回転 / ホイールでズーム</div>
 <div id="backHomeBtn">← ホームへ戻る</div>
-<div id="msg" hidden></div>
+<div id="msg" hidden=""></div>
 <canvas id="c"></canvas>
 
 
-<script src="./assets/threejs/three.min.js"></script>
-<script src="./assets/threejs/GLTFLoader.js"></script>
-<script src="./assets/threejs/OrbitControls.js"></script>
+<script src="file:///C:/Users/kobay/Downloads/assets/threejs/three.min.js"></script>
+<script src="file:///C:/Users/kobay/Downloads/assets/threejs/GLTFLoader.js"></script>
+<script src="file:///C:/Users/kobay/Downloads/assets/threejs/OrbitControls.js"></script>
 <script>
 var _fabricPresetCache = new Map(); // hoisted cache to avoid TDZ
 /* ========= 基本 ========= */
@@ -1468,6 +1476,26 @@ document.getElementById('backHomeBtn').addEventListener('click', function () {
   window.location.href = 'https://riistilo.base.shop/';
 });
 
+/* ===== 型選択に戻る ===== */
+$('backToPattern').addEventListener('click', () => {
+  document.body.classList.add('selecting');
+});
+
+/* ===== 生地を全部選び直す（3枚一括） ===== */
+$('changeAllFabrics').addEventListener('click', () => {
+  const order = ['A', 'B', 'C'];
+  const EMPTY = '-';
+  const currentList = order.map(s => slotFabricIds[s] || EMPTY);
+
+  const p = new URLSearchParams();
+  p.set('pattern', currentPatternId);
+  p.set('fabrics', currentList.join(','));
+  // slot を渡さない → BASE側が通常モード（3枚選択）として動作する
+
+  location.href = `${FABRIC_SELECT_URL}?${p.toString()}#custom-order`;
+});
+
   
 </script>
+
 </body></html>
