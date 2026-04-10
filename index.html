@@ -1280,10 +1280,10 @@ function capturePresetThumb(index){
   const center = box.getCenter(new THREE.Vector3());
   const size   = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  const dist   = maxDim * 1.6;
+  const dist   = maxDim * 2.2;
 
   const thumbTarget = new THREE.Vector3(center.x, center.y, center.z);
-  const thumbPos    = new THREE.Vector3(center.x + dist * 0.4, center.y + dist * 0.1, center.z + dist);
+  const thumbPos    = new THREE.Vector3(center.x + dist * 0.25, center.y, center.z + dist);
 
   camera.position.copy(thumbPos);
   controls.target.copy(thumbTarget);
