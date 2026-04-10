@@ -1264,12 +1264,8 @@ function __resolveZoneForMat(m){
 }
 
 
-// サムネ用のカメラ位置（2枚目スクショっぽい斜めから）
-const THUMB_CAM_POS    = new THREE.Vector3(1.4, 1.6, 3.0);
-const THUMB_CAM_TARGET = new THREE.Vector3(0, 1.2, 0);
-
 function capturePresetThumb(index){
-  if (!model) return;                         // モデルまだ読み込み前なら何もしない
+  if (!model) return;
   const card = presetsEl.children[index];
   if (!card) return;
   const thumbEl = card.querySelector('.presetThumb');
@@ -1279,9 +1275,18 @@ function capturePresetThumb(index){
   const oldPos    = camera.position.clone();
   const oldTarget = controls.target.clone();
 
-  // サムネ用ポーズに変更
-  camera.position.copy(THUMB_CAM_POS);
-  controls.target.copy(THUMB_CAM_TARGET);
+  // モデルのバウンディングボックスからカメラ位置を自動計算
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  const size   = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const dist   = maxDim * 1.6;
+
+  const thumbTarget = new THREE.Vector3(center.x, center.y, center.z);
+  const thumbPos    = new THREE.Vector3(center.x + dist * 0.4, center.y + dist * 0.1, center.z + dist);
+
+  camera.position.copy(thumbPos);
+  controls.target.copy(thumbTarget);
   controls.update();
 
   // 1枚レンダリングしてデータURL取得
