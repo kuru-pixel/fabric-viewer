@@ -168,6 +168,25 @@ body.selecting #patternSelect{
   z-index:5;
 }
 
+/* 左パネル固定ヘッダーとスクロールエリア */
+#ui-fixed{
+  flex-shrink:0;
+  padding-top:44px;
+}
+#ui-scroll{
+  overflow-y:auto;
+  max-height:calc(100vh - 200px);
+  margin-top:4px;
+  padding-right:2px;
+}
+#ui-scroll::-webkit-scrollbar{width:4px;}
+#ui-scroll::-webkit-scrollbar-thumb{background:#ffffff44;border-radius:4px;}
+
+/* D/E/Fスロットはデフォルト非表示 */
+.slot-def{ display:none; }
+/* RISC-Setupのときだけ表示 */
+body.pattern-risc .slot-def{ display:block; }
+
 /* スマホ用矢印ナビ（PCでは非表示） */
 #presetNav{
   display:none;
@@ -306,42 +325,72 @@ body.selecting #patternSelect{
 <!-- ===== 左パネル ===== -->
 <div id="uiWrap">
   <div id="ui">
-    <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
-    <div class="btnRow">
-      <button id="backToPattern" title="型選択画面に戻る">← 型を選び直す</button>
+    <!-- 固定ヘッダー部分 -->
+    <div id="ui-fixed">
+      <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
+      <div class="btnRow">
+        <button id="backToPattern" title="型選択画面に戻る">← 型を選び直す</button>
+      </div>
+      <div style="margin-bottom:6px"></div>
+      <div class="btnRow">
+        <button id="changeAllFabrics" title="生地を3枚まとめて選び直す">← 生地を全部選び直す</button>
+      </div>
     </div>
-    <div style="margin-bottom:6px"></div>
-    <div class="btnRow">
-      <button id="changeAllFabrics" title="生地を3枚まとめて選び直す">← 生地を全部選び直す</button>
-    </div>
 
-    <!-- A〜C -->
-<div class="block">
-  <h4>生地A</h4>
-  <div class="slot-preview" id="slotPreview-A"></div>
-  <div class="btnRow">
-    <button id="changeA" type="button">生地を変更</button>
-  </div>
-</div>
+    <!-- スクロールエリア（生地スロット） -->
+    <div id="ui-scroll">
 
-<div class="block">
-  <h4>生地B</h4>
-  <div class="slot-preview" id="slotPreview-B"></div>
-  <div class="btnRow">
-    <button id="changeB" type="button">生地を変更</button>
-  </div>
-</div>
+      <!-- A〜C（常時表示） -->
+      <div class="block">
+        <h4>生地A</h4>
+        <div class="slot-preview" id="slotPreview-A"></div>
+        <div class="btnRow">
+          <button id="changeA" type="button">生地を変更</button>
+        </div>
+      </div>
 
-<div class="block">
-  <h4>生地C</h4>
-  <div class="slot-preview" id="slotPreview-C"></div>
-  <div class="btnRow">
-    <button id="changeC" type="button">生地を変更</button>
-  </div>
-</div>
+      <div class="block">
+        <h4>生地B</h4>
+        <div class="slot-preview" id="slotPreview-B"></div>
+        <div class="btnRow">
+          <button id="changeB" type="button">生地を変更</button>
+        </div>
+      </div>
 
+      <div class="block">
+        <h4>生地C</h4>
+        <div class="slot-preview" id="slotPreview-C"></div>
+        <div class="btnRow">
+          <button id="changeC" type="button">生地を変更</button>
+        </div>
+      </div>
 
-  <!--   <div style="margin-top:6px;"><small>※ <code>assets/garment.glb</code> が無い間はキューブ表示 / パーツは3D上をクリックして選択</small></div>  -->
+      <!-- D〜F（RISC-Setupのみ表示） -->
+      <div class="block slot-def" id="slotBlock-D">
+        <h4>生地D</h4>
+        <div class="slot-preview" id="slotPreview-D"></div>
+        <div class="btnRow">
+          <button id="changeD" type="button">生地を変更</button>
+        </div>
+      </div>
+
+      <div class="block slot-def" id="slotBlock-E">
+        <h4>生地E</h4>
+        <div class="slot-preview" id="slotPreview-E"></div>
+        <div class="btnRow">
+          <button id="changeE" type="button">生地を変更</button>
+        </div>
+      </div>
+
+      <div class="block slot-def" id="slotBlock-F">
+        <h4>生地F</h4>
+        <div class="slot-preview" id="slotPreview-F"></div>
+        <div class="btnRow">
+          <button id="changeF" type="button">生地を変更</button>
+        </div>
+      </div>
+
+    </div><!-- /ui-scroll -->
   </div>
 </div>
 
@@ -356,6 +405,9 @@ body.selecting #patternSelect{
   <button class="chip" id="pickA"><span class="chip-tag">A</span></button>
   <button class="chip" id="pickB"><span class="chip-tag">B</span></button>
   <button class="chip" id="pickC"><span class="chip-tag">C</span></button>
+  <button class="chip slot-def" id="pickD"><span class="chip-tag">D</span></button>
+  <button class="chip slot-def" id="pickE"><span class="chip-tag">E</span></button>
+  <button class="chip slot-def" id="pickF"><span class="chip-tag">F</span></button>
   <button class="chip none" id="pickNone">なし</button>
 </div>
 </div>
@@ -399,7 +451,7 @@ const PATTERNS = {
   'RI-3': { glb: './assets/ri-3.glb', thumb: null, slots: ['A','B','C'] },
   'RI-4': { glb: './assets/ri-4.glb', thumb: null, slots: ['A','B','C'] },
   'RI-5': { glb: './assets/ri-5.glb', thumb: null, slots: ['A','B','C'] },
-  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C'] },
+  'RISC-Setup': { glb: './assets/risc-setup.glb', thumb: null, slots: ['A','B','C','D','E','F'] },
 };
 
 function getSlots(){
@@ -660,7 +712,16 @@ const MAT_ZONE_BY_PATTERN = {
     'S-119_2779': 'Z2',
     'S-121_2791': 'Z3',
   },
-  'RISC-Setup': {},
+  'RISC-Setup': {
+    'S101_11116': 'Z1',
+    'S81_11109':  'Z2',
+    'S102_11123': 'Z3',
+    // Z4〜Z6はGLB再作成後に正しいマテリアル名に更新予定
+    // 現時点では仮としてZ1と同じマテリアルを割当
+    '__dummy_Z4': 'Z4',
+    '__dummy_Z5': 'Z5',
+    '__dummy_Z6': 'Z6',
+  },
 };
 
   
@@ -1130,13 +1191,23 @@ function clearTexture(key){
 $('changeA').addEventListener('click', ()=> goToFabricSelect('A'));
 $('changeB').addEventListener('click', ()=> goToFabricSelect('B'));
 $('changeC').addEventListener('click', ()=> goToFabricSelect('C'));
+$('changeD').addEventListener('click', ()=> goToFabricSelect('D'));
+$('changeE').addEventListener('click', ()=> goToFabricSelect('E'));
+$('changeF').addEventListener('click', ()=> goToFabricSelect('F'));
+
+/* パターンに応じてbodyクラスを切り替え（D/E/F表示制御） */
+function updatePatternBodyClass(){
+  document.body.classList.toggle('pattern-risc', currentPatternId === 'RISC-Setup');
+}
+// 初期表示時にも適用
+updatePatternBodyClass();
 
 /* ===== クリックでパーツ選択 → 吹き出し（裏面は無効） ===== */
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let pick = null, overlay = null, pickMatIndex = null;
 const bubble = $('bubble');
-const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') };
+const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), D:$('pickD'), E:$('pickE'), F:$('pickF'), None:$('pickNone') };
 
 function updateBubblePreviews(){
   getSlots().forEach(k=>{
@@ -1316,12 +1387,15 @@ function assignToSelected(key){
 chipEls.A.onclick=()=>assignToSelected('A');
 chipEls.B.onclick=()=>assignToSelected('B');
 chipEls.C.onclick=()=>assignToSelected('C');
+chipEls.D.onclick=()=>assignToSelected('D');
+chipEls.E.onclick=()=>assignToSelected('E');
+chipEls.F.onclick=()=>assignToSelected('F');
 chipEls.None.onclick=()=>applyWhiteToSelected();
 
 
 // ===== 6パターン自動切替（ZONES × A/B/C） =====
 
-// ゾーン1/2/3 に対して A/B/C をどう当てるか
+// 3ゾーン用（RI-1〜RI-5）
 const PATTERN_PERMS = [
   { label: 'パターン1 (A-B-C)', Z1: 'A', Z2: 'B', Z3: 'C' },
   { label: 'パターン2 (A-C-B)', Z1: 'A', Z2: 'C', Z3: 'B' },
@@ -1331,11 +1405,18 @@ const PATTERN_PERMS = [
   { label: 'パターン6 (C-B-A)', Z1: 'C', Z2: 'B', Z3: 'A' },
 ];
 
+// 6ゾーン用（RISC-Setup）：Z1〜Z6にA〜Fを1対1で割当（固定）
+const PATTERN_PERMS_6 = [
+  { label: 'パターン1', Z1:'A', Z2:'B', Z3:'C', Z4:'D', Z5:'E', Z6:'F' },
+];
+
 /**
  * 指定パターン番号 (0〜5) を適用
  */
 function applyPatternByIndex(index) {
-  const perm = PATTERN_PERMS[index];
+  const isRISC = currentPatternId === 'RISC-Setup';
+  const perms = isRISC ? PATTERN_PERMS_6 : PATTERN_PERMS;
+  const perm = perms[Math.min(index, perms.length - 1)];
   if (!perm) return;
 
   Object.keys(assign).forEach(k => { delete assign[k]; });
@@ -1536,6 +1617,7 @@ var t; function msg(s){ const el=$('msg'); el.textContent=s; el.hidden=false; cl
 
     GLB_PATH = def.glb;
     currentPatternId = id;
+    updatePatternBodyClass(); // D/E/F表示切り替え
 
     // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
 // ★変更：型が変わっても現在の生地IDは維持（slotFabricIds をスロット構成に合わせて整形）
@@ -1610,7 +1692,7 @@ function makeThumbFromGLB(glbPath, targetEl){
 
 /* ===== 生地スロットプレビュー更新 ===== */
 function updateSlotPreviews(){
-  ['A','B','C'].forEach(slot => {
+  ['A','B','C','D','E','F'].forEach(slot => {
     const el = document.getElementById(`slotPreview-${slot}`);
     if(!el) return;
     const id = slotFabricIds[slot];
