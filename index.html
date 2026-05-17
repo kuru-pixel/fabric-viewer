@@ -1141,10 +1141,43 @@ const chipEls = { A:$('pickA'), B:$('pickB'), C:$('pickC'), None:$('pickNone') }
 function updateBubblePreviews(){
   getSlots().forEach(k=>{
     const el = chipEls[k]; if(!el) return;
-    el.style.backgroundImage = state[k].url
-      ? `url(${state[k].url})`
-      : 'none';
+    const id = slotFabricIds[k];
+    if(id){
+      // まずJPGサムネを試みる、なければGLBのベースカラーをフォールバック
+      el.style.backgroundImage = `url('./assets/fabrics/${id}.jpg')`;
+    } else if(state[k].url){
+      el.style.backgroundImage = `url(${state[k].url})`;
+    } else {
+      el.style.backgroundImage = 'none';
+    }
   });
+}
+
+/* 「なし」押下時にWHITE.glbを適用する関数 */
+function applyWhiteToSelected(){
+  if(!pick) return;
+  const WHITE_ID = 'WHITE';
+  const WHITE_PRESET_URL = './assets/fabric-presets/WHITE.glb';
+
+  // WHITE.glbをロードしてpresetとして適用
+  loadFabricPresetById(WHITE_ID).then(preset => {
+    // クリックしたパーツのマテリアルにWHITEを適用
+    const mats = [];
+    if(pickMatIndex !== null && Array.isArray(pick.material)){
+      mats.push(pick.material[pickMatIndex]);
+    } else if(!Array.isArray(pick.material)){
+      mats.push(pick.material);
+    }
+    mats.forEach(m => {
+      if(m) applyPresetToMaterial(m, preset);
+      if(m) m.needsUpdate = true;
+    });
+  }).catch(()=>{
+    // WHITE.glbが無ければ従来通り白にリセット
+    assignToSelected('—');
+  });
+  hideBubble();
+  hideHighlight();
 }
 
 updateBubblePreviews();
@@ -1283,7 +1316,7 @@ function assignToSelected(key){
 chipEls.A.onclick=()=>assignToSelected('A');
 chipEls.B.onclick=()=>assignToSelected('B');
 chipEls.C.onclick=()=>assignToSelected('C');
-chipEls.None.onclick=()=>assignToSelected('—');
+chipEls.None.onclick=()=>applyWhiteToSelected();
 
 
 // ===== 6パターン自動切替（ZONES × A/B/C） =====
