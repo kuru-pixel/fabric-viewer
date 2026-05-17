@@ -142,6 +142,66 @@ body.selecting #patternSelect{
   z-index:5;
 }
 
+/* スマホ用矢印ナビ（PCでは非表示） */
+#presetNav{
+  display:none;
+  position:fixed;
+  bottom:16px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:6;
+  align-items:center;
+  gap:12px;
+  background:rgba(255,255,255,.85);
+  border-radius:24px;
+  padding:6px 16px;
+  backdrop-filter:blur(8px);
+  box-shadow:0 2px 12px rgba(0,0,0,.15);
+}
+#presetNav button{
+  background:none;
+  border:none;
+  font-size:22px;
+  cursor:pointer;
+  padding:0 4px;
+  line-height:1;
+}
+#presetNavLabel{
+  font-size:12px;
+  font-weight:600;
+  white-space:nowrap;
+  color:#222;
+}
+
+/* 生地スロットプレビュー */
+.slot-preview{
+  width:100%;
+  height:48px;
+  border-radius:6px;
+  background:#f0f0f0 center/cover no-repeat;
+  margin-bottom:4px;
+  font-size:10px;
+  color:#888;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #0001;
+  overflow:hidden;
+}
+.slot-preview.has-fabric{
+  color:transparent;
+}
+.slot-preview-label{
+  font-size:10px;
+  color:#666;
+  margin-bottom:4px;
+}
+
+@media(max-width:640px){
+  #presets{ display:none !important; }
+  #presetNav{ display:flex; }
+}
+
 .presetCard{
   position:relative;
   width:160px;      /* ちょい大きく */
@@ -200,15 +260,21 @@ body.selecting #patternSelect{
   <div class="wrap">
     <h1>どの服を作製しますか？</h1>
     <div id="patternGrid">
-      <button class="patternCard" data-id="RI-1"><div class="name">RI-1</div><div class="thumb" id="thumb-RI1"></div></button>
-      <button class="patternCard" data-id="RI-2"><div class="name">RI-2</div><div class="thumb" id="thumb-RI2"></div></button>
-      <button class="patternCard" data-id="RI-3"><div class="name">RI-3</div><div class="thumb" id="thumb-RI3"></div></button>
-      <button class="patternCard" data-id="RI-4"><div class="name">RI-4</div><div class="thumb" id="thumb-RI4"></div></button>
-      <button class="patternCard" data-id="RI-5"><div class="name">RI-5</div><div class="thumb" id="thumb-RI5"></div></button>
-      <button class="patternCard" data-id="RISC-Setup"><div class="name">RISC-Setup</div><div class="thumb" id="thumb-RISC"></div></button>
-
+      <button class="patternCard" data-id="RI-1"><div class="name">RI-1</div><div class="thumb" style="background-image:url('./assets/patterns/RI-1.jpg')"></div></button>
+      <button class="patternCard" data-id="RI-2"><div class="name">RI-2</div><div class="thumb" style="background-image:url('./assets/patterns/RI-2.jpg')"></div></button>
+      <button class="patternCard" data-id="RI-3"><div class="name">RI-3</div><div class="thumb" style="background-image:url('./assets/patterns/RI-3.jpg')"></div></button>
+      <button class="patternCard" data-id="RI-4"><div class="name">RI-4</div><div class="thumb" style="background-image:url('./assets/patterns/RI-4.jpg')"></div></button>
+      <button class="patternCard" data-id="RI-5"><div class="name">RI-5</div><div class="thumb" style="background-image:url('./assets/patterns/RI-5.jpg')"></div></button>
+      <button class="patternCard" data-id="RISC-Setup"><div class="name">RISC-Setup</div><div class="thumb" style="background-image:url('./assets/patterns/RISC-Setup.jpg')"></div></button>
     </div>
   </div>
+</div>
+
+<!-- スマホ用パターン矢印ナビ -->
+<div id="presetNav">
+  <button id="presetPrev">&#8592;</button>
+  <span id="presetNavLabel">パターン1 (A-B-C)</span>
+  <button id="presetNext">&#8594;</button>
 </div>
 
 <!-- ===== 左パネル ===== -->
@@ -226,6 +292,7 @@ body.selecting #patternSelect{
     <!-- A〜C -->
 <div class="block">
   <h4>生地A</h4>
+  <div class="slot-preview" id="slotPreview-A"></div>
   <div class="btnRow">
     <button id="changeA" type="button">生地を変更</button>
   </div>
@@ -233,6 +300,7 @@ body.selecting #patternSelect{
 
 <div class="block">
   <h4>生地B</h4>
+  <div class="slot-preview" id="slotPreview-B"></div>
   <div class="btnRow">
     <button id="changeB" type="button">生地を変更</button>
   </div>
@@ -240,6 +308,7 @@ body.selecting #patternSelect{
 
 <div class="block">
   <h4>生地C</h4>
+  <div class="slot-preview" id="slotPreview-C"></div>
   <div class="btnRow">
     <button id="changeC" type="button">生地を変更</button>
   </div>
@@ -913,6 +982,8 @@ function applyAssignments(){
 
   saveAssignToStorage();
   debounceMaybeCapture();
+  // スロットプレビューを更新（⑤）
+  if(typeof updateSlotPreviews === 'function') updateSlotPreviews();
 }
 /* ====== スクショ履歴 ====== */
 const MAX_SHOTS = 6;
@@ -1467,6 +1538,55 @@ function makeThumbFromGLB(glbPath, targetEl){
 }
 
 
+/* ===== 生地スロットプレビュー更新 ===== */
+function updateSlotPreviews(){
+  ['A','B','C'].forEach(slot => {
+    const el = document.getElementById(`slotPreview-${slot}`);
+    if(!el) return;
+    const id = slotFabricIds[slot];
+    if(id){
+      el.style.backgroundImage = `url('./assets/fabrics/${id}.jpg')`;
+      el.classList.add('has-fabric');
+      el.textContent = id;
+    } else {
+      el.style.backgroundImage = '';
+      el.classList.remove('has-fabric');
+      el.textContent = '未選択';
+    }
+  });
+}
+
+/* ===== スマホ用矢印ナビ ===== */
+let currentPresetIndex = 0;
+function updatePresetNav(){
+  const cards = document.querySelectorAll('.presetCard2, #presets .presetCard');
+  const total = cards.length;
+  if(!total) return;
+  const label = document.getElementById('presetNavLabel');
+  const activeCard = cards[currentPresetIndex];
+  if(label && activeCard){
+    const lbl = activeCard.querySelector('.presetLabel');
+    label.textContent = lbl ? lbl.textContent : `パターン${currentPresetIndex+1}`;
+  }
+  cards.forEach((c,i) => c.classList.toggle('active', i === currentPresetIndex));
+  // アクティブパターンを適用
+  applyPatternByIndex(currentPresetIndex);
+  setActivePreset(currentPresetIndex);
+}
+
+document.getElementById('presetPrev').addEventListener('click', () => {
+  const total = document.querySelectorAll('#presets .presetCard').length;
+  if(!total) return;
+  currentPresetIndex = (currentPresetIndex - 1 + total) % total;
+  updatePresetNav();
+});
+document.getElementById('presetNext').addEventListener('click', () => {
+  const total = document.querySelectorAll('#presets .presetCard').length;
+  if(!total) return;
+  currentPresetIndex = (currentPresetIndex + 1) % total;
+  updatePresetNav();
+});
+
 document.getElementById('backHomeBtn').addEventListener('click', function () {
   window.location.href = 'https://riistilo.base.shop/';
 });
@@ -1476,7 +1596,7 @@ $('backToPattern').addEventListener('click', () => {
   document.body.classList.add('selecting');
 });
 
-/* ===== 生地を全部選び直す（3枚一括） ===== */
+/* ===== 生地を全部選び直す（3枚一括・patternを引き継ぐ） ===== */
 $('changeAllFabrics').addEventListener('click', () => {
   const order = ['A', 'B', 'C'];
   const EMPTY = '-';
@@ -1485,7 +1605,7 @@ $('changeAllFabrics').addEventListener('click', () => {
   const p = new URLSearchParams();
   p.set('pattern', currentPatternId);
   p.set('fabrics', currentList.join(','));
-  // slot を渡さない → BASE側が通常モード（3枚選択）として動作する
+  p.set('slot', 'ALL'); // BASE側で「全部選び直しモード」と判別するために渡す
 
   location.href = `${FABRIC_SELECT_URL}?${p.toString()}#custom-order`;
 });
