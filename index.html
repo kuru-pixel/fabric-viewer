@@ -251,6 +251,30 @@ body.selecting #patternSelect{
 /* RISC-Setupのときだけ表示 */
 body.pattern-risc .slot-def{ display:block; }
 
+/* カスタムパターン削除ボタン */
+.customPresetCard{ position:relative; }
+.customDeleteBtn{
+  position:absolute;
+  top:4px;
+  right:4px;
+  width:20px;
+  height:20px;
+  border-radius:50%;
+  border:1px solid #444;
+  background:#111;
+  color:#888;
+  font-size:11px;
+  cursor:pointer;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  line-height:1;
+  transition:border-color 0.15s, color 0.15s;
+}
+.customDeleteBtn:hover{ border-color:#fff; color:#fff; }
+
 /* スマホ用矢印ナビ */
 #presetNav{
   display:none;
@@ -394,13 +418,17 @@ body.pattern-risc .slot-def{ display:block; }
   <div id="ui">
     <!-- 固定ヘッダー部分 -->
     <div id="ui-fixed">
-      <div style="font-weight:600;margin-bottom:6px">Fabric Viewer</div>
+      <div style="font-weight:400;font-size:9px;letter-spacing:0.2em;margin-bottom:12px;color:#555;text-transform:uppercase">Fabric Viewer</div>
       <div class="btnRow">
         <button id="backToPattern" title="型選択画面に戻る">← 型を選び直す</button>
       </div>
       <div style="margin-bottom:6px"></div>
       <div class="btnRow">
         <button id="changeAllFabrics" title="生地を3枚まとめて選び直す">← 生地を全部選び直す</button>
+      </div>
+      <div style="margin-bottom:6px"></div>
+      <div class="btnRow">
+        <button id="uploadFabricBtnViewer" title="自分の生地写真をアップロード">生地をアップロード</button>
       </div>
     </div>
 
@@ -457,6 +485,14 @@ body.pattern-risc .slot-def{ display:block; }
         </div>
       </div>
 
+      <!-- デフォルトに戻す・カスタム保存 -->
+      <div class="block">
+        <button id="resetToDefaultBtn" type="button">デフォルトに戻す</button>
+      </div>
+      <div class="block" id="saveCustomPatternBlock">
+        <button id="saveCustomPatternBtn" type="button" style="display:none;border-color:#555;color:#fff;"></button>
+      </div>
+
     </div><!-- /ui-scroll -->
   </div>
 </div>
@@ -480,6 +516,17 @@ body.pattern-risc .slot-def{ display:block; }
 </div>
 
 <button id="panelToggle" title="パネル表示/非表示">☰</button>
+
+<!-- アップロードスロット選択モーダル（viewer側） -->
+<div id="viewerUploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:none;align-items:center;justify-content:center;">
+  <div style="background:#111;border:1px solid #2a2a2a;border-radius:2px;padding:32px;text-align:center;color:#fff;min-width:240px;">
+    <p style="font-size:9px;letter-spacing:0.15em;color:#aaa;margin-bottom:20px;text-transform:uppercase">どのスロットに入れますか？</p>
+    <div id="viewerUploadSlotBtns" style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;flex-wrap:wrap;"></div>
+    <button id="viewerUploadCancel" style="background:transparent;border:none;color:#555;font-size:0.7rem;letter-spacing:0.1em;cursor:pointer;padding:8px;">キャンセル</button>
+  </div>
+</div>
+<input type="file" id="fabricFileInputViewer" accept="image/*,.heic,.heif" style="display:none">
+
 <div id="presets"></div>
 
 <div id="footer">ドラッグで回転 / ホイールでズーム</div>
@@ -1440,17 +1487,144 @@ function assignToSelected(key){
   }
   if(!mat) return;
 
-    console.log(
-    '[ZONE SETUP]',
-    'material name:', mat.name || '(no-name)',
-    'uuid:', mat.uuid,
-    'assigned fabric:', key
-  );
-  
   assign[mat.uuid] = key;
   lastOpWasNone = (key === '—');
   applyAssignments();
+
+  // 個別タッチで変更 → 「パターンNとして保存」ボタンを表示
+  markCustomModified();
 }
+// ===== カスタムパターン管理 =====
+const MAX_CUSTOM_PATTERNS = 50;
+const BASE_PATTERN_COUNT = 6; // デフォルトパターン数
+
+// セッション中のカスタムパターン保存（ページ閉じたらリセット）
+// { id: number, label: string, assign: {}, patternId: string, slotFabricIds: {} }
+let customPatterns = [];
+let nextCustomId = 7; // 次に保存するパターン番号
+let isCustomModified = false; // 個別変更フラグ
+
+function markCustomModified(){
+  if(customPatterns.length >= MAX_CUSTOM_PATTERNS) return;
+  isCustomModified = true;
+  updateSavePatternBtn();
+}
+
+function updateSavePatternBtn(){
+  const btn = document.getElementById('saveCustomPatternBtn');
+  if(!btn) return;
+  if(isCustomModified){
+    btn.style.display = 'block';
+    btn.textContent = `パターン${nextCustomId}として保存`;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function saveCustomPattern(){
+  if(!isCustomModified) return;
+  if(customPatterns.length >= MAX_CUSTOM_PATTERNS){ msg('保存上限（50）に達しています'); return; }
+
+  const id = nextCustomId;
+  const label = `パターン${id}`;
+
+  // 現在のassignとslotFabricIdsをスナップショット
+  const snapAssign = { ...assign };
+  const snapSlots = { ...slotFabricIds };
+  const snapPatternId = currentPatternId;
+
+  customPatterns.push({ id, label, assign: snapAssign, slotFabricIds: snapSlots, patternId: snapPatternId });
+
+  nextCustomId++;
+  isCustomModified = false;
+  updateSavePatternBtn();
+
+  // 下部サムネに追加
+  addCustomPresetCard(customPatterns[customPatterns.length - 1]);
+  msg(`${label} を保存しました`);
+}
+
+function deleteCustomPattern(id){
+  const idx = customPatterns.findIndex(p => p.id === id);
+  if(idx === -1) return;
+  customPatterns.splice(idx, 1);
+
+  // 対応するサムネカードを削除
+  const card = document.getElementById(`customCard-${id}`);
+  if(card) card.remove();
+
+  msg(`パターン${id} を削除しました`);
+}
+
+function applyCustomPattern(p){
+  // 型が違う場合はスキップ
+  if(p.patternId !== currentPatternId){
+    msg('この型では使えないパターンです');
+    return;
+  }
+  // assignを復元
+  Object.keys(assign).forEach(k => delete assign[k]);
+  Object.assign(assign, p.assign);
+  applyAssignments();
+  isCustomModified = false;
+  updateSavePatternBtn();
+  msg(`${p.label} を適用しました`);
+}
+
+function resetToDefaultPattern(){
+  // 現在アクティブなデフォルトパターンに戻す
+  applyPatternByIndex(activePresetIndex >= 0 ? activePresetIndex : 0);
+  isCustomModified = false;
+  updateSavePatternBtn();
+  msg('デフォルトに戻しました');
+}
+
+function addCustomPresetCard(p){
+  const presetsEl = document.getElementById('presets');
+  if(!presetsEl) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'presetCard customPresetCard';
+  btn.id = `customCard-${p.id}`;
+  btn.innerHTML = `
+    <button class="customDeleteBtn" title="削除">×</button>
+    <div class="presetThumb"></div>
+    <div class="presetLabel">${p.label}</div>
+  `;
+
+  // 削除ボタン
+  btn.querySelector('.customDeleteBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(confirm(`${p.label} を削除しますか？`)) deleteCustomPattern(p.id);
+  });
+
+  // カード本体クリックで適用
+  btn.addEventListener('click', ()=> applyCustomPattern(p));
+
+  presetsEl.appendChild(btn);
+
+  // サムネ撮影
+  const thumbEl = btn.querySelector('.presetThumb');
+  if(thumbEl && model){
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const dist = maxDim * 3.0;
+    const oldPos = camera.position.clone();
+    const oldTarget = controls.target.clone();
+    camera.position.set(center.x + dist * 0.2, center.y, center.z + dist);
+    controls.target.copy(center);
+    controls.update();
+    renderer.render(scene, camera);
+    thumbEl.style.backgroundImage = `url(${renderer.domElement.toDataURL('image/png')})`;
+    camera.position.copy(oldPos);
+    controls.target.copy(oldTarget);
+    controls.update();
+  }
+}
+
+
 chipEls.A.onclick=()=>assignToSelected('A');
 chipEls.B.onclick=()=>assignToSelected('B');
 chipEls.C.onclick=()=>assignToSelected('C');
@@ -1458,9 +1632,6 @@ chipEls.D.onclick=()=>assignToSelected('D');
 chipEls.E.onclick=()=>assignToSelected('E');
 chipEls.F.onclick=()=>assignToSelected('F');
 chipEls.None.onclick=()=>applyWhiteToSelected();
-
-
-// ===== 6パターン自動切替（ZONES × A/B/C） =====
 
 // 3ゾーン用（RI-1〜RI-5）
 const PATTERN_PERMS = [
@@ -1755,6 +1926,128 @@ function makeThumbFromGLB(glbPath, targetEl){
     const hidden = document.body.classList.toggle('panel-hidden');
     btn.textContent = hidden ? '☰' : '✕';
   });
+})();
+
+/* ===== デフォルトに戻す ===== */
+document.getElementById('resetToDefaultBtn').addEventListener('click', resetToDefaultPattern);
+
+/* ===== カスタムパターン保存 ===== */
+document.getElementById('saveCustomPatternBtn').addEventListener('click', saveCustomPattern);
+
+/* ===== 生地アップロード機能（viewer側）===== */
+(function(){
+  const fileInput  = document.getElementById('fabricFileInputViewer');
+  const uploadBtn  = document.getElementById('uploadFabricBtnViewer');
+  const modal      = document.getElementById('viewerUploadModal');
+  const slotBtns   = document.getElementById('viewerUploadSlotBtns');
+  const cancelBtn  = document.getElementById('viewerUploadCancel');
+
+  if(!fileInput || !uploadBtn) return;
+
+  let pendingDataUrl = null;
+
+  // HEICをJPGに変換
+  async function convertHeicToJpeg(file){
+    if(!window.heic2any){
+      await new Promise((resolve, reject)=>{
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    return await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+  }
+
+  async function fileToDataUrl(file){
+    const name = file.name.toLowerCase();
+    const isHeic = name.endsWith('.heic') || name.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif';
+    let target = file;
+    if(isHeic){
+      try{ target = await convertHeicToJpeg(file); }
+      catch(e){ msg('HEICの変換に失敗しました。JPG/PNGをお試しください。'); return null; }
+    }
+    return new Promise(resolve=>{
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(target);
+    });
+  }
+
+  // アップロード画像をスロットに適用する
+  function applyUploadedImageToSlot(dataUrl, slot){
+    const loader = new THREE.TextureLoader();
+    loader.load(dataUrl, tex=>{
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+      // stateにセット（presetの代わりにtexとして扱う）
+      if(!state[slot]) state[slot] = {};
+      state[slot].tex = tex;
+      state[slot].url = dataUrl;
+      state[slot].preset = null; // GLBプリセットはクリア
+      slotFabricIds[slot] = `UPLOAD_${slot}`;
+
+      applyAssignments();
+      updateSlotPreviews();
+      msg(`生地${slot}にアップロード画像を適用しました`);
+    });
+  }
+
+  // モーダルのスロットボタンを現在のスロット構成に合わせて生成
+  function buildSlotBtns(){
+    slotBtns.innerHTML = '';
+    getSlots().forEach(slot=>{
+      const btn = document.createElement('button');
+      btn.textContent = slot;
+      btn.style.cssText = 'width:52px;height:52px;border:1px solid #333;background:transparent;color:#fff;font-size:1rem;letter-spacing:0.1em;cursor:pointer;border-radius:2px;transition:border-color 0.15s,background 0.15s;';
+      btn.addEventListener('mouseenter', ()=>{ btn.style.borderColor='#fff'; btn.style.background='#fff'; btn.style.color='#000'; });
+      btn.addEventListener('mouseleave', ()=>{ btn.style.borderColor='#333'; btn.style.background='transparent'; btn.style.color='#fff'; });
+      btn.addEventListener('click', ()=>{
+        modal.style.display = 'none';
+        if(pendingDataUrl) applyUploadedImageToSlot(pendingDataUrl, slot);
+        pendingDataUrl = null;
+      });
+      slotBtns.appendChild(btn);
+    });
+  }
+
+  uploadBtn.addEventListener('click', ()=> fileInput.click());
+
+  fileInput.addEventListener('change', async ()=>{
+    const file = fileInput.files[0];
+    if(!file) return;
+    fileInput.value = '';
+    pendingDataUrl = await fileToDataUrl(file);
+    if(!pendingDataUrl) return;
+    buildSlotBtns();
+    modal.style.display = 'flex';
+  });
+
+  cancelBtn.addEventListener('click', ()=>{
+    modal.style.display = 'none';
+    pendingDataUrl = null;
+  });
+
+  // BASE側からsessionStorageで渡されたアップロード画像を受け取る
+  try{
+    const uploadSlot = sessionStorage.getItem('uploadedFabricSlot');
+    if(uploadSlot){
+      const dataUrl = sessionStorage.getItem(`uploadedFabric_${uploadSlot}`);
+      if(dataUrl){
+        sessionStorage.removeItem('uploadedFabricSlot');
+        sessionStorage.removeItem(`uploadedFabric_${uploadSlot}`);
+        // モデルが読み込まれてから適用
+        const waitAndApply = setInterval(()=>{
+          if(model){
+            clearInterval(waitAndApply);
+            applyUploadedImageToSlot(dataUrl, uploadSlot);
+          }
+        }, 300);
+      }
+    }
+  }catch(e){}
 })();
 
 /* ===== 生地スロットプレビュー更新 ===== */
